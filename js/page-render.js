@@ -1,6 +1,6 @@
 // Page orchestration: league tabs, hero, date strip, match list rendering
 import { LEAGUES, leagueById, TEAM_RANGE_PAST_DAYS, TEAM_RANGE_FUTURE_DAYS } from "./leagues-config.js";
-import { fetchScoreboard, loadSnapshot, ymd } from "./espn-api.js";
+import { fetchScoreboard, fetchTeamSchedule, loadSnapshot, ymd } from "./espn-api.js";
 import { pageState, currentLeague, sameDay, addDays } from "./app-state.js";
 import { matchCardHtml, statusPillHtml, skeletonHtml, emptyHtml, errorHtml, escapeHtml } from "./match-card-render.js";
 import { showNetBanner, hideNetBanner } from "./net-banner.js";
@@ -150,15 +150,16 @@ function flashChangedScores(container, events) {
 }
 
 function listHtml(events, st, grouped) {
+  const pid = st.teamFilter?.id; // W/D/L chips from the selected team's view
   // multi-day views get date headers (unless live-first sort interleaves days)
   if (!grouped || st.sort === "live")
-    return events.map((e) => matchCardHtml(e, st.query)).join("");
+    return events.map((e) => matchCardHtml(e, st.query, pid)).join("");
   let lastDay = "";
   return events.map((e) => {
     const day = dayFmt.format(e.date);
     const header = day !== lastDay ? `<h2 class="date-group-header">${escapeHtml(day)}</h2>` : "";
     lastDay = day;
-    return header + matchCardHtml(e, st.query);
+    return header + matchCardHtml(e, st.query, pid);
   }).join("");
 }
 
@@ -198,9 +199,11 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
   // team filter, "Tất cả" mode, or free-text search all widen to the full window —
   // searching should never be trapped inside the selected day
   const rangeMode = !!(st.teamFilter || st.showAll || st.query);
-  const dates = rangeMode
-    ? `${ymd(addDays(new Date(), -TEAM_RANGE_PAST_DAYS))}-${ymd(addDays(new Date(), TEAM_RANGE_FUTURE_DAYS))}`
-    : ymd(st.date);
+  const dates = st.teamFilter
+    ? `team:${st.teamFilter.id}` // label for sig/viewKey — fetch uses the schedule endpoint
+    : rangeMode
+      ? `${ymd(addDays(new Date(), -TEAM_RANGE_PAST_DAYS))}-${ymd(addDays(new Date(), TEAM_RANGE_FUTURE_DAYS))}`
+      : ymd(st.date);
 
   // instant paint from the local snapshot while the network round-trip runs;
   // the fresh response then re-renders (or patches) over it
@@ -219,7 +222,21 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
 
   if (!silent) $("refresh-btn").classList.add("spinning"); // background fetch cue
   try {
-    const data = await fetchScoreboard(league.slug, dates, { force });
+    let data;
+    if (st.teamFilter) {
+      // team view: full season from the schedule endpoint (real, verifiable
+      // results) + today's scoreboard merged in for live scores
+      const [sched, today] = await Promise.all([
+        fetchTeamSchedule(league.slug, st.teamFilter.id),
+        fetchScoreboard(league.slug, ymd(new Date()), { force }),
+      ]);
+      const byId = new Map(sched.events.map((e) => [e.id, e]));
+      for (const e of today.events)
+        if (e.home?.id === st.teamFilter.id || e.away?.id === st.teamFilter.id) byId.set(e.id, e);
+      data = { season: sched.season || today.season, events: [...byId.values()] };
+    } else {
+      data = await fetchScoreboard(league.slug, dates, { force });
+    }
     if (seq !== loadSeq) return { liveCount: 0 }; // a newer load superseded this one
     settled = true;
     hideNetBanner(); // fresh data landed — any stale-data warning is obsolete

@@ -24,11 +24,22 @@ const timeFmt = new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-d
 
 function formPips(form) {
   if (!form) return "";
+  const label = { W: "Thắng", D: "Hòa", L: "Thua" };
   const pips = [...form].slice(-5).map((c) => {
     const cls = c === "W" ? "w" : c === "L" ? "l" : "d";
-    return `<span class="form-pip ${cls}" title="${c}"></span>`;
+    return `<span class="form-pip ${cls}" title="${label[c] || c}"></span>`;
   });
-  return `<span class="team-form">${pips.join("")}</span>`;
+  return `<span class="team-form" title="Phong độ 5 trận gần nhất (tính mọi giải đấu) — bấm vào đội để xem từng trận">${pips.join("")}</span>`;
+}
+
+// W/D/L of a finished match from the selected team's perspective —
+// the proof behind the form pips
+function resultChipHtml(ev, teamId) {
+  if (ev.state !== "post" || !teamId) return "";
+  const me = String(ev.home.id) === String(teamId) ? ev.home : ev.away;
+  const opp = me === ev.home ? ev.away : ev.home;
+  const [cls, label] = me.winner ? ["w", "Thắng"] : opp.winner ? ["l", "Thua"] : ["d", "Hòa"];
+  return `<span class="result-chip ${cls}" title="${label}">${cls.toUpperCase()}</span>`;
 }
 
 function teamRow(team, opponent, state, query) {
@@ -37,7 +48,9 @@ function teamRow(team, opponent, state, query) {
       ? team.winner ? "winner" : opponent.winner ? "loser" : ""
       : "";
   return `
-    <div class="team-row ${result}">
+    <div class="team-row ${result}" data-team-id="${escapeHtml(team.id ?? "")}"
+         data-team-name="${escapeHtml(team.name)}" data-team-logo="${escapeHtml(team.logo)}"
+         title="Bấm để xem lịch đội ${escapeHtml(team.name)}">
       ${team.logo ? `<img src="${escapeHtml(team.logo)}" srcset="${escapeHtml(team.logo)} 1x, ${escapeHtml(logoHiDpi(team.logo))} 2x" alt="" width="26" height="26" loading="lazy" decoding="async" />` : ""}
       <span class="team-name">${highlight(team.name, query)}</span>
       ${formPips(team.form)}
@@ -55,7 +68,7 @@ export function statusPillHtml(ev) {
 const pinIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>`;
 const tvIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="m8 2 4 4 4-4"/></svg>`;
 
-export function matchCardHtml(ev, query = "") {
+export function matchCardHtml(ev, query = "", perspectiveTeamId = null) {
   const started = ev.state !== "pre";
   const score = started
     ? `<div class="score-box">
@@ -79,6 +92,7 @@ export function matchCardHtml(ev, query = "") {
     <div class="match-when">
       <span class="kickoff-time">${timeFmt.format(ev.date)}</span>
       ${statusPillHtml(ev)}
+      ${resultChipHtml(ev, perspectiveTeamId)}
     </div>
     <div class="match-teams">
       ${teamRow(ev.home, ev.away, ev.state, query)}

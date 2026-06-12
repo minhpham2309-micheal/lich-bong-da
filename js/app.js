@@ -99,6 +99,13 @@ $("refresh-btn").addEventListener("click", async () => {
   $("refresh-btn").classList.remove("spinning");
 });
 $("matches").addEventListener("click", (e) => {
+  const row = e.target.closest(".team-row");
+  if (row?.dataset.teamId) {
+    return update({
+      teamFilter: { id: row.dataset.teamId, name: row.dataset.teamName, logo: row.dataset.teamLogo },
+      query: "",
+    });
+  }
   if (e.target.closest("#retry-btn")) loadAndRenderMatches({ force: true });
   const jump = e.target.closest("[data-jump-date]");
   if (jump) {

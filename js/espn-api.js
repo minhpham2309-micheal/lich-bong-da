@@ -118,6 +118,65 @@ export async function fetchTeams(slug) {
   return teams;
 }
 
+/* ── Team season schedule: real past results so the form is verifiable ── */
+const scheduleCache = new Map(); // slug:teamId -> { at, data }
+
+export async function fetchTeamSchedule(slug, teamId) {
+  const key = `${slug}:${teamId}`;
+  const hit = scheduleCache.get(key);
+  if (hit && Date.now() - hit.at < 5 * 60_000) return hit.data;
+  const [played, fixtures] = await Promise.all([
+    getJson(`${BASE}/${slug}/teams/${teamId}/schedule`),
+    getJson(`${BASE}/${slug}/teams/${teamId}/schedule?fixture=true`),
+  ]);
+  const events = [...(played.events || []), ...(fixtures.events || [])]
+    .map(normalizeScheduleEvent)
+    .filter(Boolean);
+  const data = { season: played.season?.displayName || "", events };
+  scheduleCache.set(key, { at: Date.now(), data });
+  return data;
+}
+
+// schedule events differ from scoreboard: score is an object, status sits on
+// the competition, logos only under team.logos
+function normalizeScheduleEvent(e) {
+  const comp = e.competitions?.[0] || {};
+  const st = comp.status?.type || {};
+  const map = (c) =>
+    c && {
+      id: c.team?.id,
+      homeAway: c.homeAway,
+      name: c.team?.displayName || "?",
+      shortName: c.team?.shortDisplayName || c.team?.displayName || "?",
+      abbr: c.team?.abbreviation || "",
+      logo: smallLogo(c.team?.logos?.[0]?.href || ""),
+      score: c.score?.displayValue ?? "",
+      winner: c.winner === true,
+      form: "",
+    };
+  const home = map((comp.competitors || []).find((c) => c.homeAway === "home"));
+  const away = map((comp.competitors || []).find((c) => c.homeAway === "away"));
+  if (!home || !away) return null;
+  return {
+    id: e.id,
+    date: new Date(e.date),
+    state: st.state || "pre",
+    statusDetail: st.shortDetail || "",
+    completed: !!st.completed,
+    clock: comp.status?.displayClock || "",
+    venue: comp.venue?.fullName || "",
+    city: comp.venue?.address?.city || "",
+    country: comp.venue?.address?.country || "",
+    note: comp.notes?.[0]?.headline || "",
+    broadcasts: (comp.broadcasts || [])
+      .map((b) => b.media?.shortName || (b.names || [])[0])
+      .filter(Boolean)
+      .slice(0, 3),
+    home,
+    away,
+  };
+}
+
 function normalizeCompetitor(c) {
   return {
     id: c.team?.id,

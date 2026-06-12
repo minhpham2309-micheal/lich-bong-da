@@ -90,6 +90,23 @@
 }
 .status-pill.ft { color: var(--faint); }
 
+/* W/D/L of each finished match in team view — the proof behind the form pips */
+.result-chip {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  width: 20px; height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+}
+.result-chip.w { background: color-mix(in srgb, var(--win) 22%, transparent); color: var(--win); }
+.result-chip.l { background: color-mix(in srgb, var(--loss) 22%, transparent); color: var(--loss); }
+.result-chip.d { background: color-mix(in srgb, var(--draw) 22%, transparent); color: var(--draw); }
+
+/* WC: national-team form mixes friendlies/qualifiers we can't show — stay honest, hide it */
+body[data-league="wc"] .team-form { display: none; }
+
 /* middle: the two teams */
 .match-teams { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
 .team-row {
@@ -97,6 +114,10 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .team-row:hover .team-name { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 }
 .team-row img {
   width: 26px; height: 26px;
