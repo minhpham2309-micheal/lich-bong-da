@@ -1,0 +1,121 @@
+/* ── Team search box, suggestion dropdown, filter chips ─────────────── */
+
+.search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+  max-width: 420px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px; height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+#search-input {
+  width: 100%;
+  padding: 12px 16px 12px 42px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+#search-input::placeholder { color: var(--faint); }
+#search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  background: #101512;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  max-height: 340px;
+  overflow-y: auto;
+  animation: rise 0.16s ease both;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.85rem;
+  color: var(--text);
+  transition: background 0.12s;
+}
+.suggestion-item img { width: 22px; height: 22px; object-fit: contain; }
+.suggestion-item .abbr {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--faint);
+  letter-spacing: 0.08em;
+}
+.suggestion-item:hover, .suggestion-item.focused {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.suggestion-item mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 700;
+}
+.suggestion-hint {
+  padding: 9px 14px;
+  font-size: 0.68rem;
+  color: var(--faint);
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+}
+
+/* active team-filter chip */
+.chip-area { display: flex; gap: 8px; }
+.team-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 12px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  animation: rise 0.2s ease both;
+}
+.team-chip img { width: 18px; height: 18px; object-fit: contain; }
+.team-chip .remove-chip {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.team-chip .remove-chip:hover { background: var(--loss); color: #fff; }
+
+@media (max-width: 640px) {
+  /* iOS Safari zooms the page when focusing inputs under 16px */
+  #search-input { font-size: 16px; padding-top: 13px; padding-bottom: 13px; }
+  .suggestions { max-height: 46vh; }
+  .suggestion-item { padding: 13px 14px; } /* comfortable tap targets */
+  .team-chip .remove-chip { width: 24px; height: 24px; }
+}

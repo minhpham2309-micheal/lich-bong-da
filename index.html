@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>MATCHDAY — Lịch bóng đá</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Sora:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/cards.css" />
+  <link rel="stylesheet" href="css/search.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>⚽</text></svg>" />
+</head>
+<body data-league="wc">
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#/wc">
+      <span class="brand-dot"></span>MATCHDAY<span class="brand-sub">lịch bóng đá cá nhân</span>
+    </a>
+    <div class="live-summary" id="live-summary" hidden>
+      <span class="live-pulse"></span><span id="live-summary-text"></span>
+    </div>
+  </header>
+
+  <nav class="league-nav" id="league-nav" aria-label="Chọn giải đấu"></nav>
+
+  <main class="page">
+    <section class="hero">
+      <h1 class="hero-title" id="hero-title">World Cup 2026</h1>
+      <p class="hero-meta" id="hero-meta"></p>
+    </section>
+
+    <section class="toolbar">
+      <div class="search-wrap" id="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="search-input" type="text" autocomplete="off" spellcheck="false"
+               placeholder="Tìm đội bóng… (gõ để gợi ý)" aria-label="Tìm đội bóng" />
+        <div class="suggestions" id="suggestions" hidden></div>
+      </div>
+      <div class="toolbar-right">
+        <div class="chip-area" id="chip-area"></div>
+        <label class="sort-wrap">
+          <span>Sắp xếp</span>
+          <select id="sort-select" aria-label="Sắp xếp trận đấu">
+            <option value="time">Giờ đấu ↑</option>
+            <option value="live">LIVE trước</option>
+            <option value="timeDesc">Giờ đấu ↓</option>
+          </select>
+        </label>
+        <button class="refresh-btn" id="refresh-btn" title="Làm mới ngay">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
+          <span id="refresh-label">tự động</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="date-strip-wrap" id="date-strip-wrap">
+      <button class="strip-nav" id="strip-prev" aria-label="Lùi ngày">‹</button>
+      <div class="date-strip" id="date-strip"></div>
+      <button class="strip-nav" id="strip-next" aria-label="Tiến ngày">›</button>
+      <button class="today-btn" id="today-btn">Hôm nay</button>
+    </section>
+
+    <section class="matches" id="matches" aria-live="polite"></section>
+  </main>
+
+  <footer class="footer">
+    Dữ liệu realtime từ ESPN · tự cập nhật mỗi <span id="poll-secs">30</span>s · giờ hiển thị theo máy của bạn
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+/* ── Stadium Night Broadcast — design tokens & atmosphere ───────────── */
+:root {
+  --bg: #070a09;
+  --bg-glow: #0d1a12;
+  --panel: rgba(255, 255, 255, 0.035);
+  --panel-hover: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.09);
+  --text: #eef3ee;
+  --muted: #8a968c;
+  --faint: #5a655c;
+  --win: #5dd97c;
+  --draw: #9aa49c;
+  --loss: #f0625d;
+  --accent: #c8f560; /* overridden per league */
+  --accent-ink: #0a0d0a;
+  --font-display: "Bebas Neue", sans-serif;
+  --font-body: "Sora", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --radius: 14px;
+}
+
+/* per-league accent — set via body[data-league] */
+body[data-league="wc"]        { --accent: #ffd166; }
+body[data-league="ucl"]       { --accent: #7aa2ff; }
+body[data-league="uel"]       { --accent: #ff9f43; }
+body[data-league="epl"]       { --accent: #ff5d8f; }
+body[data-league="laliga"]    { --accent: #ff6b35; }
+body[data-league="seriea"]    { --accent: #4cc9f0; }
+body[data-league="bundesliga"]{ --accent: #ff4d4d; }
+body[data-league="ligue1"]    { --accent: #c8f560; }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { color-scheme: dark; }
+
+body {
+  font-family: var(--font-body);
+  background:
+    radial-gradient(1200px 600px at 15% -10%, var(--bg-glow), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(20, 30, 24, 0.9), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  transition: --accent 0.3s;
+}
+
+/* film grain overlay */
+.grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+button, input, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; background: none; border: none; touch-action: manipulation; }
+
+/* notch / dynamic-island devices */
+@supports (padding: env(safe-area-inset-left)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+img { display: block; }
+
+/* scrollbars */
+::-webkit-scrollbar { height: 6px; width: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* shared keyframes */
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes flash-score {
+  0%   { background: var(--accent); color: var(--accent-ink); }
+  100% { background: transparent; color: inherit; }
+}
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
