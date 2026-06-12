@@ -10,6 +10,7 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "numeric
 
 let prevScores = new Map(); // eventId -> "home-away", to flash score changes
 let loadSeq = 0;            // guards against out-of-order async renders
+let lastRenderSig = "";     // skip DOM rebuilds when a silent poll brings no changes
 
 export function renderNav(liveCounts = new Map()) {
   $("league-nav").innerHTML = LEAGUES.map((l) => {
@@ -164,6 +165,14 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     const imminent = filtered.some(
       (e) => e.state === "pre" && e.date - Date.now() < 10 * 60 * 1000 && Date.now() - e.date < 3 * 60 * 60 * 1000,
     );
+
+    // weak-device guard: identical view + identical data → leave the DOM alone
+    const sig = JSON.stringify([
+      league.id, dates, st.sort, st.query, st.teamFilter?.id,
+      filtered.map((e) => [e.id, e.state, e.home.score, e.away.score, e.clock, e.statusDetail]),
+    ]);
+    if (silent && sig === lastRenderSig) return { liveCount, imminent };
+    lastRenderSig = sig;
 
     box.innerHTML = filtered.length
       ? listHtml(filtered, st, rangeMode)

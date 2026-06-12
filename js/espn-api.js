@@ -16,9 +16,19 @@ function isTodayKey(dates) {
 }
 
 async function getJson(url) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  // timeout so a hung request on flaky networks can't stall the polling loop
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(12_000),
+  });
   if (!res.ok) throw new Error(`ESPN ${res.status}`);
   return res.json();
+}
+
+// ESPN serves 500×500 logos; the combiner resizes server-side (~12KB → ~1KB each)
+function smallLogo(url) {
+  const m = (url || "").match(/^https:\/\/a\.espncdn\.com(\/i\/.+)$/);
+  return m ? `https://a.espncdn.com/combiner/i?img=${encodeURI(m[1])}&w=64&h=64` : url || "";
 }
 
 /**
@@ -75,7 +85,7 @@ function normalizeCompetitor(c) {
     name: c.team?.displayName || "?",
     shortName: c.team?.shortDisplayName || c.team?.displayName || "?",
     abbr: c.team?.abbreviation || "",
-    logo: c.team?.logo || c.team?.logos?.[0]?.href || "",
+    logo: smallLogo(c.team?.logo || c.team?.logos?.[0]?.href || ""),
     score: c.score ?? "",
     winner: c.winner === true,
     form: c.form || "",

@@ -52,7 +52,7 @@ export async function showSuggestions(query) {
       .map(
         (t, i) => `
       <button class="suggestion-item" data-idx="${i}">
-        ${t.logo ? `<img src="${escapeHtml(t.logo)}" alt="" loading="lazy" />` : ""}
+        ${t.logo ? `<img src="${escapeHtml(t.logo)}" alt="" width="22" height="22" loading="lazy" decoding="async" />` : ""}
         <span>${highlight(t.name, query.trim())}</span>
         <span class="abbr">${escapeHtml(t.abbr)}</span>
       </button>`,

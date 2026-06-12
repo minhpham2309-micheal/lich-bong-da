@@ -9,6 +9,12 @@ let timer = null;
 let currentDelay = POLL_IDLE_MS;
 let onCadenceChange = () => {};
 
+// Save-Data header or 2G connection → stay on the slow cadence, skip extras
+function dataSaver() {
+  const c = navigator.connection;
+  return !!(c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || "")));
+}
+
 export function startPolling(cadenceCb) {
   onCadenceChange = cadenceCb || onCadenceChange;
   schedule(currentDelay);
@@ -18,6 +24,9 @@ export function startPolling(cadenceCb) {
     if (document.hidden) stop();
     else { tick(); }
   });
+  // flaky network: halt while offline, refresh the moment we're back
+  window.addEventListener("offline", stop);
+  window.addEventListener("online", tick);
 }
 
 export function pollNow() {
@@ -38,21 +47,25 @@ function schedule(delay) {
 
 async function tick() {
   if (document.hidden) return;
+  if (!navigator.onLine) return schedule(POLL_IDLE_MS); // retry heartbeat while offline
   const { liveCount, imminent, error } = await loadAndRenderMatches({ force: true, silent: true });
-  scanAllLeaguesForLive(); // fire-and-forget: updates LIVE dots on tabs
+  if (!dataSaver()) scanAllLeaguesForLive(); // fire-and-forget: updates LIVE dots on tabs
   if (!error) {
     const stamp = new Date().toLocaleTimeString("vi-VN");
     document.getElementById("refresh-label").textContent = `↻ ${stamp}`;
   }
-  schedule(liveCount > 0 || imminent ? POLL_LIVE_MS : POLL_IDLE_MS);
+  const fast = (liveCount > 0 || imminent) && !dataSaver();
+  schedule(fast ? POLL_LIVE_MS : POLL_IDLE_MS);
 }
 
 // Lightweight scan of today's fixtures in every league to badge the nav tabs
 // and the topbar summary. Served mostly from cache (15s TTL on today).
 let scanning = false;
+let lastScanAt = 0;
 async function scanAllLeaguesForLive() {
-  if (scanning) return;
+  if (scanning || Date.now() - lastScanAt < 60_000) return; // 8 requests — once a minute is plenty
   scanning = true;
+  lastScanAt = Date.now();
   try {
     const today = ymd(new Date());
     const results = await Promise.allSettled(

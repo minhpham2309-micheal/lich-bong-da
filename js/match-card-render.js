@@ -37,7 +37,7 @@ function teamRow(team, opponent, state, query) {
       : "";
   return `
     <div class="team-row ${result}">
-      ${team.logo ? `<img src="${escapeHtml(team.logo)}" alt="" loading="lazy" />` : ""}
+      ${team.logo ? `<img src="${escapeHtml(team.logo)}" alt="" width="26" height="26" loading="lazy" decoding="async" />` : ""}
       <span class="team-name">${highlight(team.name, query)}</span>
       ${formPips(team.form)}
     </div>`;
