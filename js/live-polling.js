@@ -4,6 +4,7 @@
 import { LEAGUES, POLL_IDLE_MS, POLL_LIVE_MS } from "./leagues-config.js";
 import { fetchScoreboard, ymd } from "./espn-api.js";
 import { loadAndRenderMatches, renderNav } from "./page-render.js";
+import { showNetBanner, hideNetBanner } from "./net-banner.js";
 
 let timer = null;
 let currentDelay = POLL_IDLE_MS;
@@ -26,8 +27,14 @@ export function startPolling(cadenceCb) {
     else { tick(); }
   });
   // flaky network: halt while offline, refresh the moment we're back
-  window.addEventListener("offline", stop);
-  window.addEventListener("online", tick);
+  window.addEventListener("offline", () => {
+    stop();
+    showNetBanner("Mất kết nối — đang hiển thị dữ liệu đã lưu.");
+  });
+  window.addEventListener("online", () => {
+    hideNetBanner();
+    tick();
+  });
 }
 
 export function pollNow() {

@@ -11,8 +11,14 @@ export function ymd(date) {
   return `${y}${m}${d}`;
 }
 
-function isTodayKey(dates) {
-  return dates.includes(ymd(new Date()));
+// TTL theo bản chất dữ liệu: ngày đã đá xong không bao giờ đổi,
+// lịch tương lai hiếm khi đổi, chỉ hôm nay (live) mới cần tươi liên tục
+function ttlFor(dates) {
+  const today = ymd(new Date());
+  const [start, end = start] = dates.split("-");
+  if (end < today) return Infinity;      // finished days are immutable
+  if (start > today) return 30 * 60_000; // future fixtures: 30 min
+  return 15_000;                          // touches today: keep fresh
 }
 
 async function getJson(url) {
@@ -42,7 +48,7 @@ export function logoHiDpi(url) {
  */
 export async function fetchScoreboard(slug, dates, { force = false } = {}) {
   const key = `${slug}:${dates}`;
-  const ttl = isTodayKey(dates) ? 15_000 : 300_000;
+  const ttl = ttlFor(dates);
   const hit = scoreboardCache.get(key);
   if (!force && hit && Date.now() - hit.at < ttl) return hit.data;
 

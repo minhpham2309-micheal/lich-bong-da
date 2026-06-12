@@ -97,6 +97,20 @@
 }
 .league-tab.active .tab-live { background: var(--accent-ink); }
 
+/* network-status strip — honest about stale data, quiet otherwise */
+.net-banner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 28px 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  color: #ffcf7a;
+  animation: rise 0.25s ease both;
+}
+.net-banner::before { content: "⚠ "; }
+.net-banner[hidden] { display: none; }
+
 .page { max-width: 1100px; margin: 0 auto; padding: 8px 28px 60px; }
 
 /* hero */

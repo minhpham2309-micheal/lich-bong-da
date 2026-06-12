@@ -3,6 +3,7 @@ import { LEAGUES, leagueById, TEAM_RANGE_PAST_DAYS, TEAM_RANGE_FUTURE_DAYS } fro
 import { fetchScoreboard, loadSnapshot, ymd } from "./espn-api.js";
 import { pageState, currentLeague, sameDay, addDays } from "./app-state.js";
 import { matchCardHtml, statusPillHtml, skeletonHtml, emptyHtml, errorHtml, escapeHtml } from "./match-card-render.js";
+import { showNetBanner, hideNetBanner } from "./net-banner.js";
 
 const $ = (id) => document.getElementById(id);
 const dowFmt = new Intl.DateTimeFormat("vi-VN", { weekday: "short" });
@@ -216,10 +217,12 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     }
   }
 
+  if (!silent) $("refresh-btn").classList.add("spinning"); // background fetch cue
   try {
     const data = await fetchScoreboard(league.slug, dates, { force });
     if (seq !== loadSeq) return { liveCount: 0 }; // a newer load superseded this one
     settled = true;
+    hideNetBanner(); // fresh data landed — any stale-data warning is obsolete
 
     const filtered = sortEvents(applyFilters(data.events, st), st.sort);
     const liveCount = filtered.filter((e) => e.state === "in").length;
@@ -269,8 +272,13 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     if (seq !== loadSeq) return { liveCount: 0 };
     settled = true;
     console.error("loadAndRenderMatches:", err);
-    // never wipe good content (snapshot or previous view) with an error screen
-    if (!silent && !box.querySelector(".match-card")) box.innerHTML = errorHtml();
+    // never wipe good content (snapshot or previous view) with an error screen,
+    // but DO tell the user the scores on screen may be stale
+    if (box.querySelector(".match-card"))
+      showNetBanner("Không lấy được dữ liệu mới — đang hiển thị bản đã lưu, sẽ tự thử lại.");
+    else if (!silent) box.innerHTML = errorHtml();
     return { liveCount: 0, error: true };
+  } finally {
+    if (!silent && seq === loadSeq) $("refresh-btn").classList.remove("spinning");
   }
 }
