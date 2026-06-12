@@ -75,7 +75,7 @@ export function statusPillHtml(ev) {
 const pinIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>`;
 const tvIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="m8 2 4 4 4-4"/></svg>`;
 
-export function matchCardHtml(ev, query = "", perspectiveTeamId = null) {
+export function matchCardHtml(ev, query = "", perspectiveTeamId = null, showLeague = false) {
   const started = ev.state !== "pre";
   const score = started
     ? `<div class="score-box">
@@ -88,6 +88,9 @@ export function matchCardHtml(ev, query = "", perspectiveTeamId = null) {
   const place = [ev.venue, ev.city, ev.city.includes(ev.country) ? "" : ev.country]
     .filter(Boolean).join(", ");
   const meta = [
+    // mixed-competition lists (team history) label which tournament each match is
+    showLeague && ev.league &&
+      `<span class="meta-line league-line"><span class="meta-text">${escapeHtml(ev.league)}</span></span>`,
     ev.note && `<span class="meta-line group-note"><span class="meta-text">${escapeHtml(ev.note)}</span></span>`,
     `<span class="meta-line">${pinIcon}<span class="meta-text">${place ? escapeHtml(place) : "Sân: chưa công bố"}</span></span>`,
     ev.broadcasts.length &&

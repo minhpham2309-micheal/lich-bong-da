@@ -197,6 +197,18 @@
 }
 .meta-line svg { width: 11px; height: 11px; flex-shrink: 0; opacity: 0.7; margin-top: 2px; }
 .meta-line.group-note { color: var(--accent); font-weight: 600; letter-spacing: 0.04em; }
+/* which competition a match belongs to (mixed team-history lists) */
+.meta-line.league-line .meta-text {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text);
+  background: var(--panel-hover);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 7px;
+}
 
 /* skeleton loading */
 .skeleton-card {

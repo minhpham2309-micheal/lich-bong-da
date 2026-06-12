@@ -59,10 +59,11 @@ export async function fetchScoreboard(slug, dates, { force = false, snapshot = t
   // force = live poll: unique _cb skips the CDN's ~7s cache so data is origin-fresh
   const buster = force ? `&_cb=${Date.now()}` : "";
   const raw = await getJson(`${BASE}/${slug}/scoreboard?dates=${dates}&limit=1000${buster}`);
+  const label = COMP_LABELS[slug] || raw.leagues?.[0]?.name || "";
   const data = {
     season: raw.leagues?.[0]?.season?.displayName || "",
     leagueName: raw.leagues?.[0]?.name || "",
-    events: (raw.events || []).map(normalizeEvent),
+    events: (raw.events || []).map((e) => normalizeEvent(e, label)),
   };
   scoreboardCache.set(key, { at: Date.now(), data });
   capMap(scoreboardCache, 40);
@@ -159,32 +160,50 @@ const NATIONAL_COMPS = [
   "uefa.nations", "concacaf.nations.league", "concacaf.gold", "caf.nations",
 ];
 
+// short display labels per competition — events in a mixed list carry these
+// so a team's history says WHICH tournament each match belonged to
+const COMP_LABELS = {
+  "fifa.world": "World Cup",
+  "fifa.friendly": "Giao hữu",
+  "fifa.worldq.uefa": "VL World Cup · UEFA",
+  "fifa.worldq.conmebol": "VL World Cup · Nam Mỹ",
+  "fifa.worldq.concacaf": "VL World Cup · CONCACAF",
+  "fifa.worldq.afc": "VL World Cup · châu Á",
+  "fifa.worldq.caf": "VL World Cup · châu Phi",
+  "fifa.worldq.ofc": "VL World Cup · châu Đại Dương",
+  "uefa.nations": "UEFA Nations League",
+  "concacaf.nations.league": "CONCACAF Nations League",
+  "concacaf.gold": "Gold Cup",
+  "caf.nations": "AFCON",
+};
+
 export async function fetchTeamSchedule(slug, teamId) {
   const key = `${slug}:${teamId}`;
   const hit = scheduleCache.get(key);
   if (hit && Date.now() - hit.at < 5 * 60_000) return hit.data;
 
-  const urls = [
-    `${BASE}/${slug}/teams/${teamId}/schedule`,
-    `${BASE}/${slug}/teams/${teamId}/schedule?fixture=true`,
+  const feeds = [
+    { url: `${BASE}/${slug}/teams/${teamId}/schedule`, slug },
+    { url: `${BASE}/${slug}/teams/${teamId}/schedule?fixture=true`, slug },
     ...(slug === "fifa.world"
-      ? NATIONAL_COMPS.map((c) => `${BASE}/${c}/teams/${teamId}/schedule`)
+      ? NATIONAL_COMPS.map((c) => ({ url: `${BASE}/${c}/teams/${teamId}/schedule`, slug: c }))
       : []),
   ];
-  const results = await Promise.allSettled(urls.map(getJson));
+  const results = await Promise.allSettled(feeds.map((f) => getJson(f.url)));
   // a missing competition is fine; ALL feeds failing is a network error and
   // must throw — silently returning [] would overwrite good snapshot content
   if (!results.some((r) => r.status === "fulfilled")) throw results[0].reason;
   let season = "";
   const byId = new Map();
-  for (const r of results) {
-    if (r.status !== "fulfilled") continue; // a missing competition is fine
+  results.forEach((r, i) => {
+    if (r.status !== "fulfilled") return; // a missing competition is fine
     season ||= r.value.season?.displayName || "";
+    const label = COMP_LABELS[feeds[i].slug] || "";
     for (const raw of r.value.events || []) {
-      const e = normalizeScheduleEvent(raw);
+      const e = normalizeScheduleEvent(raw, label);
       if (e && !byId.has(e.id)) byId.set(e.id, e);
     }
-  }
+  });
   const data = { season, events: [...byId.values()] };
   scheduleCache.set(key, { at: Date.now(), data });
   capMap(scheduleCache, 20);
@@ -194,9 +213,10 @@ export async function fetchTeamSchedule(slug, teamId) {
 
 // shared event shape — sources differ between scoreboard and schedule feeds,
 // so status/clock/broadcasts/competitors are resolved by the caller
-function eventShape(e, comp, st, clock, broadcasts, home, away) {
+function eventShape(e, comp, st, clock, broadcasts, home, away, league) {
   return {
     id: String(e.id), // ids are compared all over the app — normalize once here
+    league: league || "", // which competition this match belongs to
     date: new Date(e.date),
     state: st.state || "pre", // pre | in | post
     statusDetail: st.shortDetail || "",
@@ -228,7 +248,7 @@ function competitorShape(c, { logo, score, form }) {
 
 // schedule events: score is an object, status sits on the competition,
 // logos only under team.logos, no form field
-function normalizeScheduleEvent(e) {
+function normalizeScheduleEvent(e, leagueLabel = "") {
   const comp = e.competitions?.[0] || {};
   const map = (c) =>
     c &&
@@ -244,7 +264,10 @@ function normalizeScheduleEvent(e) {
     .map((b) => b.media?.shortName || (b.names || [])[0])
     .filter(Boolean)
     .slice(0, 3);
-  return eventShape(e, comp, comp.status?.type || {}, comp.status?.displayClock, broadcasts, home, away);
+  return eventShape(
+    e, comp, comp.status?.type || {}, comp.status?.displayClock, broadcasts, home, away,
+    leagueLabel || e.league?.name || "",
+  );
 }
 
 function normalizeCompetitor(c) {
@@ -257,7 +280,7 @@ function normalizeCompetitor(c) {
   });
 }
 
-function normalizeEvent(e) {
+function normalizeEvent(e, leagueLabel = "") {
   const comp = e.competitions?.[0] || {};
   const home = (comp.competitors || []).find((c) => c.homeAway === "home");
   const away = (comp.competitors || []).find((c) => c.homeAway === "away");
@@ -266,5 +289,6 @@ function normalizeEvent(e) {
     e, comp, e.status?.type || {}, e.status?.displayClock, broadcasts,
     home ? normalizeCompetitor(home) : null,
     away ? normalizeCompetitor(away) : null,
+    leagueLabel,
   );
 }

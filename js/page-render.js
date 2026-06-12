@@ -116,11 +116,12 @@ function tryPatchCards(box, events, st) {
   for (let i = 0; i < events.length; i++)
     if (cards[i].dataset.eventId !== String(events[i].id)) return false;
 
+  const tagged = isMixedLeagues(events);
   events.forEach((ev, i) => {
     if (cards[i].dataset.state !== ev.state) {
       // state transition (pre→in, in→post) changes structure/styling — rebuild
       // JUST this card; neighbours that are still live keep their DOM untouched
-      cards[i].outerHTML = matchCardHtml(ev, st.query, st.teamFilter?.id);
+      cards[i].outerHTML = matchCardHtml(ev, st.query, st.teamFilter?.id, tagged);
       if (ev.state !== "pre") prevScores.set(ev.id, `${ev.home.score}-${ev.away.score}`);
     } else {
       patchCard(cards[i], ev);
@@ -171,17 +172,24 @@ function flashChangedScores(container, events) {
   }
 }
 
+// league tags only when the list actually mixes competitions — a single-league
+// list (any club page) would just repeat the page's own name as noise
+function isMixedLeagues(events) {
+  return new Set(events.map((e) => e.league).filter(Boolean)).size > 1;
+}
+
 function listHtml(events, st, grouped) {
   const pid = st.teamFilter?.id; // W/D/L chips from the selected team's view
+  const tagged = isMixedLeagues(events);
   // multi-day views get date headers (unless live-first sort interleaves days)
   if (!grouped || st.sort === "live")
-    return events.map((e) => matchCardHtml(e, st.query, pid)).join("");
+    return events.map((e) => matchCardHtml(e, st.query, pid, tagged)).join("");
   let lastDay = "";
   return events.map((e) => {
     const day = dayFmt.format(e.date);
     const header = day !== lastDay ? `<h2 class="date-group-header">${escapeHtml(day)}</h2>` : "";
     lastDay = day;
-    return header + matchCardHtml(e, st.query, pid);
+    return header + matchCardHtml(e, st.query, pid, tagged);
   }).join("");
 }
 
