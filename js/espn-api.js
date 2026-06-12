@@ -121,18 +121,39 @@ export async function fetchTeams(slug) {
 /* ── Team season schedule: real past results so the form is verifiable ── */
 const scheduleCache = new Map(); // slug:teamId -> { at, data }
 
+// national teams play across many competitions — pull them all so a World Cup
+// team's past matches (friendlies, qualifiers, continental cups) are visible
+const NATIONAL_COMPS = [
+  "fifa.friendly",
+  "fifa.worldq.uefa", "fifa.worldq.conmebol", "fifa.worldq.concacaf",
+  "fifa.worldq.afc", "fifa.worldq.caf", "fifa.worldq.ofc",
+  "uefa.nations", "concacaf.nations.league", "concacaf.gold", "caf.nations",
+];
+
 export async function fetchTeamSchedule(slug, teamId) {
   const key = `${slug}:${teamId}`;
   const hit = scheduleCache.get(key);
   if (hit && Date.now() - hit.at < 5 * 60_000) return hit.data;
-  const [played, fixtures] = await Promise.all([
-    getJson(`${BASE}/${slug}/teams/${teamId}/schedule`),
-    getJson(`${BASE}/${slug}/teams/${teamId}/schedule?fixture=true`),
-  ]);
-  const events = [...(played.events || []), ...(fixtures.events || [])]
-    .map(normalizeScheduleEvent)
-    .filter(Boolean);
-  const data = { season: played.season?.displayName || "", events };
+
+  const urls = [
+    `${BASE}/${slug}/teams/${teamId}/schedule`,
+    `${BASE}/${slug}/teams/${teamId}/schedule?fixture=true`,
+    ...(slug === "fifa.world"
+      ? NATIONAL_COMPS.map((c) => `${BASE}/${c}/teams/${teamId}/schedule`)
+      : []),
+  ];
+  const results = await Promise.allSettled(urls.map(getJson));
+  let season = "";
+  const byId = new Map();
+  for (const r of results) {
+    if (r.status !== "fulfilled") continue; // a missing competition is fine
+    season ||= r.value.season?.displayName || "";
+    for (const raw of r.value.events || []) {
+      const e = normalizeScheduleEvent(raw);
+      if (e && !byId.has(e.id)) byId.set(e.id, e);
+    }
+  }
+  const data = { season, events: [...byId.values()] };
   scheduleCache.set(key, { at: Date.now(), data });
   return data;
 }
@@ -187,7 +208,9 @@ function normalizeCompetitor(c) {
     logo: smallLogo(c.team?.logo || c.team?.logos?.[0]?.href || ""),
     score: c.score ?? "",
     winner: c.winner === true,
-    form: c.form || "",
+    // ESPN's form string is most-recent-FIRST; reverse it so every form in the
+    // app reads chronologically (left = oldest, right = latest match)
+    form: c.form ? [...c.form].reverse().join("") : "",
   };
 }
 

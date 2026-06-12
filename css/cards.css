@@ -104,8 +104,8 @@
 .result-chip.l { background: color-mix(in srgb, var(--loss) 22%, transparent); color: var(--loss); }
 .result-chip.d { background: color-mix(in srgb, var(--draw) 22%, transparent); color: var(--draw); }
 
-/* WC: national-team form mixes friendlies/qualifiers we can't show — stay honest, hide it */
-body[data-league="wc"] .team-form { display: none; }
+/* (WC form pips are visible again: the team view now pulls friendlies,
+   qualifiers and continental cups, so every pip can be cross-checked) */
 
 /* middle: the two teams */
 .match-teams { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
@@ -139,7 +139,7 @@ body[data-league="wc"] .team-form { display: none; }
   border-radius: 3px;
   padding: 0 1px;
 }
-.team-form { display: flex; gap: 3px; margin-left: 6px; }
+.team-form { display: flex; gap: 3px; margin-left: 6px; flex-shrink: 0; }
 .form-pip {
   width: 7px; height: 7px;
   border-radius: 2px;
@@ -270,7 +270,7 @@ body[data-league="wc"] .team-form { display: none; }
   .kickoff-time { font-size: 0.9rem; }
   .team-row img { width: 22px; height: 22px; }
   .team-name { font-size: 0.88rem; }
-  .team-form { display: none; }
+  .form-pip { width: 6px; height: 6px; } /* pips stay, just tighter on phones */
   .date-group-header { font-size: 1.25rem; }
 }
 

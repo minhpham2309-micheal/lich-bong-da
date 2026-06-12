@@ -105,7 +105,7 @@ function applyFilters(events, st) {
  * Returns false on any structural difference (new match, reorder, pre→started)
  * so the caller falls back to a full render.
  */
-function tryPatchCards(box, events) {
+function tryPatchCards(box, events, needsResultChips) {
   const cards = box.querySelectorAll(".match-card");
   // empty list never "patches" — vacuous match would leave skeleton/stale UI up
   if (!events.length || cards.length !== events.length) return false;
@@ -113,6 +113,9 @@ function tryPatchCards(box, events) {
     if (cards[i].dataset.eventId !== String(events[i].id)) return false;
     const started = events[i].state !== "pre";
     if (started !== !!cards[i].querySelector(".score[data-score-of]")) return false;
+    // team view: a match that just finished needs its W/D/L chip — full render
+    if (needsResultChips && events[i].state === "post" && !cards[i].querySelector(".result-chip"))
+      return false;
   }
   events.forEach((ev, i) => patchCard(cards[i], ev));
   return true;
@@ -230,10 +233,29 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
         fetchTeamSchedule(league.slug, st.teamFilter.id),
         fetchScoreboard(league.slug, ymd(new Date()), { force }),
       ]);
+      const tid = String(st.teamFilter.id);
       const byId = new Map(sched.events.map((e) => [e.id, e]));
       for (const e of today.events)
         if (e.home?.id === st.teamFilter.id || e.away?.id === st.teamFilter.id) byId.set(e.id, e);
-      data = { season: sched.season || today.season, events: [...byId.values()] };
+      const all = [...byId.values()];
+
+      // form pips computed from the very matches on this screen — verifiable
+      // 1:1 against the W/D/L chips, independent of ESPN's own form field
+      const formStr = all
+        .filter((e) => e.state === "post")
+        .sort((a, b) => a.date - b.date)
+        .slice(-5)
+        .map((e) => {
+          const me = String(e.home.id) === tid ? e.home : e.away;
+          const opp = me === e.home ? e.away : e.home;
+          return me.winner ? "W" : opp.winner ? "L" : "D";
+        })
+        .join("");
+      const events = all.map((e) => {
+        const side = String(e.home.id) === tid ? "home" : String(e.away.id) === tid ? "away" : null;
+        return side ? { ...e, [side]: { ...e[side], form: formStr } } : e; // clone — caches stay pristine
+      });
+      data = { season: sched.season || today.season, events };
     } else {
       data = await fetchScoreboard(league.slug, dates, { force });
     }
@@ -263,7 +285,7 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     lastViewKey = viewKey;
 
     // data changed but the list shape didn't → surgical patch, no rebuild
-    if (tryPatchCards(box, filtered)) {
+    if (tryPatchCards(box, filtered, !!st.teamFilter)) {
       renderHero(data.season, filtered.length, liveCount);
       return { liveCount, imminent };
     }

@@ -29,7 +29,7 @@ function formPips(form) {
     const cls = c === "W" ? "w" : c === "L" ? "l" : "d";
     return `<span class="form-pip ${cls}" title="${label[c] || c}"></span>`;
   });
-  return `<span class="team-form" title="Phong độ 5 trận gần nhất (tính mọi giải đấu) — bấm vào đội để xem từng trận">${pips.join("")}</span>`;
+  return `<span class="team-form" title="Phong độ 5 trận chính thức gần nhất — bấm vào đội để đối chiếu từng trận">${pips.join("")}</span>`;
 }
 
 // W/D/L of a finished match from the selected team's perspective —
