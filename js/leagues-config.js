@@ -22,6 +22,7 @@ export function leagueById(id) {
 export const POLL_IDLE_MS = 30_000;
 export const POLL_LIVE_MS = 7_000;
 
-// When a team filter is active we show its full schedule in this window
-export const TEAM_RANGE_PAST_DAYS = 7;
-export const TEAM_RANGE_FUTURE_DAYS = 45;
+// Window for the "Tất cả" view and free-text search across days
+// (team view uses the per-team schedule endpoint instead)
+export const RANGE_PAST_DAYS = 7;
+export const RANGE_FUTURE_DAYS = 45;

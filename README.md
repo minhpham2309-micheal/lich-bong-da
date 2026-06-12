@@ -15,7 +15,7 @@ Web xem lịch thi đấu World Cup 2026 + các giải châu Âu (UCL, UEL, Prem
 
 - **8 trang lịch độc lập** — mỗi giải một hash route (`#/wc`, `#/ucl`, `#/epl`, …), giữ nguyên ngày/bộ lọc/sort riêng khi switch qua lại.
 - **Realtime** — tự poll ESPN mỗi 30s; khi có trận LIVE (hoặc sắp bóng lăn trong 10 phút) tăng tốc lên 7s **kèm cache-buster vượt CDN** (ESPN cache ~7s) nên mọi cú poll đều lấy dữ liệu origin tươi nhất. Tỉ số đổi flash màu accent; timestamp lần cập nhật cuối hiện ở toolbar; tạm dừng khi ẩn tab.
-- **Tìm đội thông minh** — gợi ý fuzzy (prefix > word > substring > viết tắt > subsequence), điều hướng phím ↑↓/Enter/Esc; chọn đội → xem **toàn bộ lịch của đội** (7 ngày qua → 45 ngày tới), gom theo ngày. Gõ text thường thì lọc trực tiếp danh sách hiện tại.
+- **Tìm đội thông minh** — gợi ý fuzzy (prefix > word > substring > viết tắt > subsequence), không phân biệt dấu ("atletico" ra "Atlético"), điều hướng phím ↑↓/Enter/Esc; chọn đội (hoặc bấm thẳng vào đội trong card) → xem **lịch cả mùa của đội** kèm chip kết quả W/D/L từng trận. Với đội tuyển WC còn gộp giao hữu/vòng loại/cúp châu lục để đối chiếu phong độ. Gõ text thường thì lọc trên toàn bộ lịch.
 - **Xem tất cả** — pill "Tất cả" trên thanh ngày hiện toàn bộ lịch trong cửa sổ thời gian, gom theo ngày. Gõ tìm kiếm cũng tự mở rộng ra toàn bộ lịch (không bị kẹt trong ngày đang chọn).
 - **Sort** — giờ đấu ↑/↓, LIVE trước.
 - **Chi tiết trận** — logo, tỉ số, phút thi đấu, sân + thành phố, kênh phát sóng, phong độ 5 trận (W/D/L), vòng/bảng đấu.
@@ -24,7 +24,9 @@ Web xem lịch thi đấu World Cup 2026 + các giải châu Âu (UCL, UEL, Prem
 
 ## Nguồn dữ liệu
 
-ESPN public API (`site.api.espn.com`) — CORS mở, không cần đăng ký. Giờ hiển thị theo timezone máy.
+ESPN public API (`site.api.espn.com`) — CORS mở, không cần đăng ký. ESPN gom "ngày" theo giờ US Eastern; app fetch ±1 ngày rồi cắt theo **ngày local của máy bạn**, nên lịch theo ngày luôn đúng múi giờ VN.
+
+**Trình duyệt tối thiểu:** Chrome 103+ / Safari 16.2+ / Firefox 113+ (dùng `AbortSignal.timeout`, `color-mix`, `content-visibility`).
 
 ## Cấu trúc
 
@@ -32,7 +34,7 @@ ESPN public API (`site.api.espn.com`) — CORS mở, không cần đăng ký. Gi
 index.html              shell + toolbar + containers
 css/                    base (tokens/atmosphere), layout, cards, search
 js/leagues-config.js    danh sách giải + hằng số polling
-js/espn-api.js          fetch + normalize + cache (15s hôm nay / 5ph ngày khác)
+js/espn-api.js          fetch + normalize + cache phân tầng (ngày xong=vĩnh viễn, tương lai=30ph, hôm nay=15s) + snapshot localStorage
 js/app-state.js         state riêng từng trang giải
 js/match-card-render.js HTML card trận + skeleton/empty/error
 js/page-render.js       nav, hero, date strip, render danh sách

@@ -3,7 +3,7 @@
 import { leagueById } from "./leagues-config.js";
 import { fetchTeams, logoHiDpi } from "./espn-api.js";
 import { pageState, currentLeague, update } from "./app-state.js";
-import { escapeHtml, highlight } from "./match-card-render.js";
+import { escapeHtml, highlight, fold } from "./match-card-render.js";
 
 const input = () => document.getElementById("search-input");
 const dropdown = () => document.getElementById("suggestions");
@@ -12,9 +12,10 @@ let items = [];      // current suggestion list
 let focusIdx = -1;
 
 // prefix match > word-boundary > substring > abbreviation > fuzzy subsequence
+// (diacritic-folded both sides: "atletico" finds "Atlético")
 function scoreTeam(team, q) {
-  const name = team.name.toLowerCase();
-  const abbr = team.abbr.toLowerCase();
+  const name = fold(team.name);
+  const abbr = fold(team.abbr);
   if (name.startsWith(q)) return 100;
   if (name.split(/\s+/).some((w) => w.startsWith(q))) return 80;
   if (name.includes(q)) return 60;
@@ -26,7 +27,7 @@ function scoreTeam(team, q) {
 }
 
 export async function showSuggestions(query) {
-  const q = query.trim().toLowerCase();
+  const q = fold(query.trim());
   if (!q) return hideSuggestions();
 
   let teams;
@@ -35,7 +36,7 @@ export async function showSuggestions(query) {
   } catch {
     return hideSuggestions();
   }
-  if (input().value.trim().toLowerCase() !== q) return; // stale response
+  if (fold(input().value.trim()) !== q) return; // stale response
 
   items = teams
     .map((t) => ({ team: t, score: scoreTeam(t, q) }))
@@ -51,7 +52,7 @@ export async function showSuggestions(query) {
     items
       .map(
         (t, i) => `
-      <button class="suggestion-item" data-idx="${i}">
+      <button class="suggestion-item" data-idx="${i}" id="sugg-${i}" role="option" aria-selected="false">
         ${t.logo ? `<img src="${escapeHtml(t.logo)}" srcset="${escapeHtml(t.logo)} 1x, ${escapeHtml(logoHiDpi(t.logo))} 2x" alt="" width="22" height="22" loading="lazy" decoding="async" />` : ""}
         <span>${highlight(t.name, query.trim())}</span>
         <span class="abbr">${escapeHtml(t.abbr)}</span>
@@ -60,6 +61,7 @@ export async function showSuggestions(query) {
       .join("") +
     `<div class="suggestion-hint">↑↓ chọn · Enter xem lịch đội · Esc đóng · cứ gõ tiếp để tìm trên toàn bộ lịch</div>`;
   dropdown().hidden = false;
+  input().setAttribute("aria-expanded", "true");
 }
 
 export function hideSuggestions() {
@@ -67,6 +69,8 @@ export function hideSuggestions() {
   dropdown().innerHTML = "";
   items = [];
   focusIdx = -1;
+  input().setAttribute("aria-expanded", "false");
+  input().removeAttribute("aria-activedescendant");
 }
 
 export function moveFocus(delta) {
@@ -74,8 +78,10 @@ export function moveFocus(delta) {
   focusIdx = (focusIdx + delta + items.length) % items.length;
   dropdown().querySelectorAll(".suggestion-item").forEach((el, i) => {
     el.classList.toggle("focused", i === focusIdx);
+    el.setAttribute("aria-selected", String(i === focusIdx));
     if (i === focusIdx) el.scrollIntoView({ block: "nearest" });
   });
+  input().setAttribute("aria-activedescendant", `sugg-${focusIdx}`);
 }
 
 export function pickFocused() {

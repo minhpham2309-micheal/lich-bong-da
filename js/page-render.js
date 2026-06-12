@@ -1,8 +1,8 @@
 // Page orchestration: league tabs, hero, date strip, match list rendering
-import { LEAGUES, leagueById, TEAM_RANGE_PAST_DAYS, TEAM_RANGE_FUTURE_DAYS } from "./leagues-config.js";
-import { fetchScoreboard, fetchTeamSchedule, loadSnapshot, ymd } from "./espn-api.js";
+import { LEAGUES, leagueById, RANGE_PAST_DAYS, RANGE_FUTURE_DAYS } from "./leagues-config.js";
+import { fetchScoreboard, fetchTeamSchedule, loadSnapshot, logoHiDpi, ymd } from "./espn-api.js";
 import { pageState, currentLeague, sameDay, addDays } from "./app-state.js";
-import { matchCardHtml, statusPillHtml, kickoffText, skeletonHtml, emptyHtml, errorHtml, escapeHtml } from "./match-card-render.js";
+import { matchCardHtml, statusPillHtml, kickoffText, fold, skeletonHtml, emptyHtml, errorHtml, escapeHtml } from "./match-card-render.js";
 import { showNetBanner, hideNetBanner } from "./net-banner.js";
 
 const $ = (id) => document.getElementById(id);
@@ -32,9 +32,9 @@ export function renderHero(season, eventCount, liveCount) {
   const scope = st.teamFilter
     ? `lịch thi đấu của ${st.teamFilter.name}`
     : st.query
-      ? `kết quả cho “${st.query}” trong ${TEAM_RANGE_PAST_DAYS} ngày qua → ${TEAM_RANGE_FUTURE_DAYS} ngày tới`
+      ? `kết quả cho “${st.query}” trong ${RANGE_PAST_DAYS} ngày qua → ${RANGE_FUTURE_DAYS} ngày tới`
       : st.showAll
-        ? `tất cả trận (${TEAM_RANGE_PAST_DAYS} ngày qua → ${TEAM_RANGE_FUTURE_DAYS} ngày tới)`
+        ? `tất cả trận (${RANGE_PAST_DAYS} ngày qua → ${RANGE_FUTURE_DAYS} ngày tới)`
         : dayFmt.format(st.date);
   const parts = [season, scope, `${eventCount} trận`];
   if (liveCount > 0) parts.push(`${liveCount} đang LIVE`);
@@ -57,7 +57,8 @@ export function renderDateStrip() {
       !st.showAll && sameDay(d, st.date) && "selected",
       sameDay(d, today) && "is-today",
     ].filter(Boolean).join(" ");
-    return `<button class="${cls}" data-date="${d.toISOString()}">
+    const isSel = !st.showAll && sameDay(d, st.date);
+    return `<button class="${cls}" data-date="${d.toISOString()}" ${isSel ? 'aria-current="date"' : ""}>
       <span class="dow">${dowFmt.format(d)}</span><span class="dom">${d.getDate()}</span>
     </button>`;
   });
@@ -70,7 +71,7 @@ export function renderChip() {
   const st = pageState();
   $("chip-area").innerHTML = st.teamFilter
     ? `<span class="team-chip">
-         ${st.teamFilter.logo ? `<img src="${escapeHtml(st.teamFilter.logo)}" alt="" />` : ""}
+         ${st.teamFilter.logo ? `<img src="${escapeHtml(st.teamFilter.logo)}" srcset="${escapeHtml(st.teamFilter.logo)} 1x, ${escapeHtml(logoHiDpi(st.teamFilter.logo))} 2x" alt="" width="18" height="18" decoding="async" />` : ""}
          ${escapeHtml(st.teamFilter.name)}
          <button class="remove-chip" id="remove-chip" title="Bỏ lọc đội">✕</button>
        </span>`
@@ -93,9 +94,9 @@ function applyFilters(events, st, dayOnly = null) {
   if (st.teamFilter)
     out = out.filter((e) => e.home?.id === st.teamFilter.id || e.away?.id === st.teamFilter.id);
   if (st.query) {
-    const q = st.query.toLowerCase();
+    const q = fold(st.query);
     out = out.filter(
-      (e) => e.home?.name.toLowerCase().includes(q) || e.away?.name.toLowerCase().includes(q),
+      (e) => fold(e.home?.name || "").includes(q) || fold(e.away?.name || "").includes(q),
     );
   }
   return out;
@@ -121,6 +122,12 @@ function tryPatchCards(box, events) {
   return true;
 }
 
+// announce the latest score change to screen readers without re-reading the list
+function announceScore(ev) {
+  const el = $("sr-status");
+  if (el) el.textContent = `${ev.home.name} ${ev.home.score} - ${ev.away.score} ${ev.away.name}`;
+}
+
 function patchCard(card, ev) {
   card.classList.toggle("is-live", ev.state === "in");
   const pill = card.querySelector(".status-pill");
@@ -135,6 +142,7 @@ function patchCard(card, ev) {
       el.classList.remove("changed");
       void el.offsetWidth; // restart the flash animation
       el.classList.add("changed");
+      announceScore(ev);
     }
   }
   prevScores.set(ev.id, `${ev.home.score}-${ev.away.score}`);
@@ -148,8 +156,9 @@ function flashChangedScores(container, events) {
     const prev = prevScores.get(ev.id);
     if (prev !== undefined && prev !== key) {
       container
-        .querySelectorAll(`[data-event-id="${ev.id}"] .score`)
+        .querySelectorAll(`[data-event-id="${CSS.escape(String(ev.id))}"] .score`)
         .forEach((el) => el.classList.add("changed"));
+      announceScore(ev);
     }
     prevScores.set(ev.id, key);
   }
@@ -216,12 +225,14 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
   const dates = st.teamFilter
     ? `team:${st.teamFilter.id}` // label for sig/viewKey — fetch uses the schedule endpoint
     : rangeMode
-      ? `${ymd(addDays(new Date(), -TEAM_RANGE_PAST_DAYS))}-${ymd(addDays(new Date(), TEAM_RANGE_FUTURE_DAYS))}`
+      ? `${ymd(addDays(new Date(), -RANGE_PAST_DAYS))}-${ymd(addDays(new Date(), RANGE_FUTURE_DAYS))}`
       : `${ymd(addDays(st.date, -1))}-${ymd(addDays(st.date, 1))}`;
 
   // instant paint from the local snapshot while the network round-trip runs;
-  // the fresh response then re-renders (or patches) over it
-  if (!silent && !box.querySelector(".match-card")) {
+  // the fresh response then re-renders (or patches) over it. Fires when the
+  // box is empty OR we're entering a different view (league/day/team switch)
+  const viewKey = JSON.stringify([league.id, dates, st.teamFilter?.id]);
+  if (!silent && (viewKey !== lastViewKey || !box.querySelector(".match-card"))) {
     try {
       const snap = loadSnapshot(`${league.slug}:${dates}`);
       if (snap) {
@@ -296,7 +307,6 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
 
     // entrance animation on real view changes (league/day/team) only;
     // sort tweaks, typing, and live score updates swap content in place
-    const viewKey = JSON.stringify([league.id, dates, st.teamFilter?.id]);
     const isNewView = viewKey !== lastViewKey;
     lastViewKey = viewKey;
 
@@ -313,7 +323,7 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
           st.teamFilter
             ? "Đội này không có trận trong khoảng thời gian sắp tới."
             : st.query
-              ? `Không trận nào khớp “${st.query}” trong ${TEAM_RANGE_PAST_DAYS} ngày qua → ${TEAM_RANGE_FUTURE_DAYS} ngày tới.`
+              ? `Không trận nào khớp “${st.query}” trong ${RANGE_PAST_DAYS} ngày qua → ${RANGE_FUTURE_DAYS} ngày tới.`
               : st.showAll
                 ? "Giải này chưa có lịch trong khoảng thời gian tới (có thể đang nghỉ giữa mùa)."
                 : "Thử chọn ngày khác, hoặc bấm “Tất cả” để xem toàn bộ lịch.",

@@ -172,6 +172,9 @@ export async function fetchTeamSchedule(slug, teamId) {
       : []),
   ];
   const results = await Promise.allSettled(urls.map(getJson));
+  // a missing competition is fine; ALL feeds failing is a network error and
+  // must throw — silently returning [] would overwrite good snapshot content
+  if (!results.some((r) => r.status === "fulfilled")) throw results[0].reason;
   let season = "";
   const byId = new Map();
   for (const r of results) {
@@ -185,83 +188,83 @@ export async function fetchTeamSchedule(slug, teamId) {
   const data = { season, events: [...byId.values()] };
   scheduleCache.set(key, { at: Date.now(), data });
   capMap(scheduleCache, 20);
+  saveSnapshot(`${slug}:team:${teamId}`, data); // team view works offline too
   return data;
 }
 
-// schedule events differ from scoreboard: score is an object, status sits on
-// the competition, logos only under team.logos
-function normalizeScheduleEvent(e) {
-  const comp = e.competitions?.[0] || {};
-  const st = comp.status?.type || {};
-  const map = (c) =>
-    c && {
-      id: c.team?.id,
-      homeAway: c.homeAway,
-      name: c.team?.displayName || "?",
-      shortName: c.team?.shortDisplayName || c.team?.displayName || "?",
-      abbr: c.team?.abbreviation || "",
-      logo: smallLogo(c.team?.logos?.[0]?.href || ""),
-      score: c.score?.displayValue ?? "",
-      winner: c.winner === true,
-      form: "",
-    };
-  const home = map((comp.competitors || []).find((c) => c.homeAway === "home"));
-  const away = map((comp.competitors || []).find((c) => c.homeAway === "away"));
-  if (!home || !away) return null;
+// shared event shape — sources differ between scoreboard and schedule feeds,
+// so status/clock/broadcasts/competitors are resolved by the caller
+function eventShape(e, comp, st, clock, broadcasts, home, away) {
   return {
-    id: e.id,
+    id: String(e.id), // ids are compared all over the app — normalize once here
     date: new Date(e.date),
-    state: st.state || "pre",
+    state: st.state || "pre", // pre | in | post
     statusDetail: st.shortDetail || "",
     completed: !!st.completed,
-    clock: comp.status?.displayClock || "",
+    clock: clock || "",
     venue: comp.venue?.fullName || "",
     city: comp.venue?.address?.city || "",
     country: comp.venue?.address?.country || "",
     note: comp.notes?.[0]?.headline || "",
-    broadcasts: (comp.broadcasts || [])
-      .map((b) => b.media?.shortName || (b.names || [])[0])
-      .filter(Boolean)
-      .slice(0, 3),
+    broadcasts,
     home,
     away,
   };
 }
 
-function normalizeCompetitor(c) {
+function competitorShape(c, { logo, score, form }) {
   return {
-    id: c.team?.id,
+    id: c.team?.id != null ? String(c.team.id) : "",
     homeAway: c.homeAway,
     name: c.team?.displayName || "?",
     shortName: c.team?.shortDisplayName || c.team?.displayName || "?",
     abbr: c.team?.abbreviation || "",
-    logo: smallLogo(c.team?.logo || c.team?.logos?.[0]?.href || ""),
-    score: c.score ?? "",
+    logo: smallLogo(logo),
+    score,
     winner: c.winner === true,
+    form,
+  };
+}
+
+// schedule events: score is an object, status sits on the competition,
+// logos only under team.logos, no form field
+function normalizeScheduleEvent(e) {
+  const comp = e.competitions?.[0] || {};
+  const map = (c) =>
+    c &&
+    competitorShape(c, {
+      logo: c.team?.logos?.[0]?.href || "",
+      score: c.score?.displayValue ?? "",
+      form: "",
+    });
+  const home = map((comp.competitors || []).find((c) => c.homeAway === "home"));
+  const away = map((comp.competitors || []).find((c) => c.homeAway === "away"));
+  if (!home || !away) return null;
+  const broadcasts = (comp.broadcasts || [])
+    .map((b) => b.media?.shortName || (b.names || [])[0])
+    .filter(Boolean)
+    .slice(0, 3);
+  return eventShape(e, comp, comp.status?.type || {}, comp.status?.displayClock, broadcasts, home, away);
+}
+
+function normalizeCompetitor(c) {
+  return competitorShape(c, {
+    logo: c.team?.logo || c.team?.logos?.[0]?.href || "",
+    score: c.score ?? "",
     // ESPN's form string is most-recent-FIRST; reverse it so every form in the
     // app reads chronologically (left = oldest, right = latest match)
     form: c.form ? [...c.form].reverse().join("") : "",
-  };
+  });
 }
 
 function normalizeEvent(e) {
   const comp = e.competitions?.[0] || {};
   const home = (comp.competitors || []).find((c) => c.homeAway === "home");
   const away = (comp.competitors || []).find((c) => c.homeAway === "away");
-  const st = e.status?.type || {};
-  return {
-    id: e.id,
-    date: new Date(e.date),
-    state: st.state || "pre", // pre | in | post
-    statusDetail: st.shortDetail || "",
-    completed: !!st.completed,
-    clock: e.status?.displayClock || "",
-    venue: comp.venue?.fullName || "",
-    city: comp.venue?.address?.city || "",
-    country: comp.venue?.address?.country || "",
-    note: comp.notes?.[0]?.headline || "",
-    broadcasts: (comp.broadcasts || []).flatMap((b) => b.names || []).slice(0, 3),
-    home: home ? normalizeCompetitor(home) : null,
-    away: away ? normalizeCompetitor(away) : null,
-  };
+  const broadcasts = (comp.broadcasts || []).flatMap((b) => b.names || []).slice(0, 3);
+  return eventShape(
+    e, comp, e.status?.type || {}, e.status?.displayClock, broadcasts,
+    home ? normalizeCompetitor(home) : null,
+    away ? normalizeCompetitor(away) : null,
+  );
 }

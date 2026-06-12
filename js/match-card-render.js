@@ -7,11 +7,17 @@ export function escapeHtml(s) {
   );
 }
 
+// Length-preserving diacritic fold: each char maps to its base char, so indexes
+// found on the folded string are valid on the original ("Atlético" ⇆ "atletico")
+export function fold(s) {
+  return [...String(s)].map((ch) => ch.normalize("NFD")[0]).join("").toLowerCase();
+}
+
 // Wrap the matched part of a name in <mark> for live-filter highlighting
 export function highlight(name, query) {
   const safe = escapeHtml(name);
   if (!query) return safe;
-  const idx = name.toLowerCase().indexOf(query.toLowerCase());
+  const idx = fold(name).indexOf(fold(query));
   if (idx < 0) return safe;
   return (
     escapeHtml(name.slice(0, idx)) +
@@ -51,7 +57,7 @@ function teamRow(team, opponent, state, query) {
   return `
     <div class="team-row ${result}" data-team-id="${escapeHtml(team.id ?? "")}"
          data-team-name="${escapeHtml(team.name)}" data-team-logo="${escapeHtml(team.logo)}"
-         title="Bấm để xem lịch đội ${escapeHtml(team.name)}">
+         role="button" tabindex="0" title="Bấm để xem lịch đội ${escapeHtml(team.name)}">
       ${team.logo ? `<img src="${escapeHtml(team.logo)}" srcset="${escapeHtml(team.logo)} 1x, ${escapeHtml(logoHiDpi(team.logo))} 2x" alt="" width="26" height="26" loading="lazy" decoding="async" />` : ""}
       <span class="team-name">${highlight(team.name, query)}</span>
       ${formPips(team.form)}

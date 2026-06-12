@@ -105,14 +105,22 @@ $("refresh-btn").addEventListener("click", async () => {
   await pollNow();
   $("refresh-btn").classList.remove("spinning");
 });
+function openTeamFromRow(row) {
+  update({
+    teamFilter: { id: row.dataset.teamId, name: row.dataset.teamName, logo: row.dataset.teamLogo },
+    query: "",
+  });
+}
+$("matches").addEventListener("keydown", (e) => {
+  // team rows are keyboard buttons (role=button tabindex=0)
+  if ((e.key === "Enter" || e.key === " ") && e.target.closest?.(".team-row")?.dataset.teamId) {
+    e.preventDefault();
+    openTeamFromRow(e.target.closest(".team-row"));
+  }
+});
 $("matches").addEventListener("click", (e) => {
   const row = e.target.closest(".team-row");
-  if (row?.dataset.teamId) {
-    return update({
-      teamFilter: { id: row.dataset.teamId, name: row.dataset.teamName, logo: row.dataset.teamLogo },
-      query: "",
-    });
-  }
+  if (row?.dataset.teamId) return openTeamFromRow(row);
   if (e.target.closest("#retry-btn")) loadAndRenderMatches({ force: true });
   const jump = e.target.closest("[data-jump-date]");
   if (jump) {
