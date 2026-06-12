@@ -62,8 +62,17 @@ async function tick() {
 // and the topbar summary. Served mostly from cache (15s TTL on today).
 let scanning = false;
 let lastScanAt = 0;
+
+// 8 requests per scan — pace by connection quality so fast networks get fresher badges
+function scanInterval() {
+  const c = navigator.connection;
+  if (c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ""))) return 180_000;
+  if (c && c.effectiveType === "3g") return 90_000;
+  return 30_000;
+}
+
 async function scanAllLeaguesForLive() {
-  if (scanning || Date.now() - lastScanAt < 60_000) return; // 8 requests — once a minute is plenty
+  if (scanning || Date.now() - lastScanAt < scanInterval()) return;
   scanning = true;
   lastScanAt = Date.now();
   try {

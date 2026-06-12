@@ -1,4 +1,5 @@
 // HTML builders for a single match card + list states (skeleton/empty/error)
+import { logoHiDpi } from "./espn-api.js";
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) =>
@@ -37,7 +38,7 @@ function teamRow(team, opponent, state, query) {
       : "";
   return `
     <div class="team-row ${result}">
-      ${team.logo ? `<img src="${escapeHtml(team.logo)}" alt="" width="26" height="26" loading="lazy" decoding="async" />` : ""}
+      ${team.logo ? `<img src="${escapeHtml(team.logo)}" srcset="${escapeHtml(team.logo)} 1x, ${escapeHtml(logoHiDpi(team.logo))} 2x" alt="" width="26" height="26" loading="lazy" decoding="async" />` : ""}
       <span class="team-name">${highlight(team.name, query)}</span>
       ${formPips(team.form)}
     </div>`;

@@ -31,6 +31,11 @@ function smallLogo(url) {
   return m ? `https://a.espncdn.com/combiner/i?img=${encodeURI(m[1])}&w=64&h=64` : url || "";
 }
 
+// 2.2KB 128px variant for retina screens — browsers pick via srcset by pixel density
+export function logoHiDpi(url) {
+  return url.includes("/combiner/") ? url.replace("w=64&h=64", "w=128&h=128") : url;
+}
+
 /**
  * Fetch fixtures for a league. `dates` = "YYYYMMDD" or "YYYYMMDD-YYYYMMDD".
  * Cache TTL: 15s if range touches today (live data), 5min otherwise.

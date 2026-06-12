@@ -1,7 +1,7 @@
 // Team search: fuzzy suggestions with keyboard navigation.
 // Picking a suggestion switches the page into "team schedule" mode.
 import { leagueById } from "./leagues-config.js";
-import { fetchTeams } from "./espn-api.js";
+import { fetchTeams, logoHiDpi } from "./espn-api.js";
 import { pageState, currentLeague, update } from "./app-state.js";
 import { escapeHtml, highlight } from "./match-card-render.js";
 
@@ -52,7 +52,7 @@ export async function showSuggestions(query) {
       .map(
         (t, i) => `
       <button class="suggestion-item" data-idx="${i}">
-        ${t.logo ? `<img src="${escapeHtml(t.logo)}" alt="" width="22" height="22" loading="lazy" decoding="async" />` : ""}
+        ${t.logo ? `<img src="${escapeHtml(t.logo)}" srcset="${escapeHtml(t.logo)} 1x, ${escapeHtml(logoHiDpi(t.logo))} 2x" alt="" width="22" height="22" loading="lazy" decoding="async" />` : ""}
         <span>${highlight(t.name, query.trim())}</span>
         <span class="abbr">${escapeHtml(t.abbr)}</span>
       </button>`,
