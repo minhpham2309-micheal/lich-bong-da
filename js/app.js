@@ -1,11 +1,21 @@
 // Bootstrap: hash routing (#/wc, #/epl, …), event wiring, render cycle.
 import { DEFAULT_LEAGUE, leagueById } from "./leagues-config.js";
+import { fetchTeams } from "./espn-api.js";
 import { pageState, currentLeague, setCurrentLeague, update, subscribe } from "./app-state.js";
 import { renderNav, renderDateStrip, renderChip, loadAndRenderMatches } from "./page-render.js";
 import * as search from "./team-search.js";
 import { startPolling, pollNow } from "./live-polling.js";
 
 const $ = (id) => document.getElementById(id);
+
+// warm the team list for search suggestions when the network is good and we're idle
+function prefetchSearchIndex() {
+  const c = navigator.connection;
+  if (c && (c.saveData || /2g|3g/.test(c.effectiveType || ""))) return;
+  (window.requestIdleCallback || ((f) => setTimeout(f, 3000)))(() =>
+    fetchTeams(leagueById(currentLeague()).slug).catch(() => {}),
+  );
+}
 
 function leagueFromHash() {
   const id = (location.hash.match(/^#\/(\w+)/) || [])[1];
@@ -28,6 +38,7 @@ window.addEventListener("hashchange", () => {
   if (id !== currentLeague()) {
     search.hideSuggestions();
     setCurrentLeague(id); // emits -> renderAll
+    prefetchSearchIndex();
   }
 });
 
@@ -100,6 +111,7 @@ $("matches").addEventListener("click", (e) => {
 /* ── go ── */
 subscribe(renderAll);
 setCurrentLeague(leagueFromHash());
+prefetchSearchIndex();
 startPolling((delayMs) => {
   $("poll-secs").textContent = Math.round(delayMs / 1000);
 });

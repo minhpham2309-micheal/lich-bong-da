@@ -18,7 +18,8 @@ function dataSaver() {
 export function startPolling(cadenceCb) {
   onCadenceChange = cadenceCb || onCadenceChange;
   schedule(currentDelay);
-  scanAllLeaguesForLive(); // badge the tabs right away on first load
+  // first scan waits for idle so its 8 requests don't compete with first paint
+  (window.requestIdleCallback || ((f) => setTimeout(f, 2500)))(() => scanAllLeaguesForLive());
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) stop();

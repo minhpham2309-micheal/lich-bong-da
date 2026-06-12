@@ -44,7 +44,7 @@ function teamRow(team, opponent, state, query) {
     </div>`;
 }
 
-function statusPill(ev) {
+export function statusPillHtml(ev) {
   if (ev.state === "in")
     return `<span class="status-pill live">${escapeHtml(ev.clock || "LIVE")}</span>`;
   if (ev.state === "post")
@@ -78,7 +78,7 @@ export function matchCardHtml(ev, query = "") {
   <article class="match-card ${ev.state === "in" ? "is-live" : ""}" data-event-id="${ev.id}">
     <div class="match-when">
       <span class="kickoff-time">${timeFmt.format(ev.date)}</span>
-      ${statusPill(ev)}
+      ${statusPillHtml(ev)}
     </div>
     <div class="match-teams">
       ${teamRow(ev.home, ev.away, ev.state, query)}

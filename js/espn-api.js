@@ -55,7 +55,36 @@ export async function fetchScoreboard(slug, dates, { force = false } = {}) {
     events: (raw.events || []).map(normalizeEvent),
   };
   scoreboardCache.set(key, { at: Date.now(), data });
+  saveSnapshot(key, data);
   return data;
+}
+
+/* ── localStorage snapshots: instant paint on revisit, network then patches ── */
+const SNAP_PREFIX = "md:snap:";
+
+function saveSnapshot(key, data) {
+  try {
+    localStorage.setItem(SNAP_PREFIX + key, JSON.stringify({ at: Date.now(), ...data }));
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(SNAP_PREFIX)) continue;
+      const s = JSON.parse(localStorage.getItem(k) || "{}");
+      if (!s.at || Date.now() - s.at > 3 * 86_400_000) localStorage.removeItem(k);
+    }
+  } catch { /* quota / private mode — snapshots are best-effort */ }
+}
+
+export function loadSnapshot(key, maxAgeMs = 12 * 60 * 60 * 1000) {
+  try {
+    const raw = localStorage.getItem(SNAP_PREFIX + key);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (Date.now() - s.at > maxAgeMs) return null;
+    s.events.forEach((e) => (e.date = new Date(e.date))); // revive Date objects
+    return s;
+  } catch {
+    return null;
+  }
 }
 
 /**

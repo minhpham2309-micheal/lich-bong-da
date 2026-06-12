@@ -1,8 +1,8 @@
 // Page orchestration: league tabs, hero, date strip, match list rendering
 import { LEAGUES, leagueById, TEAM_RANGE_PAST_DAYS, TEAM_RANGE_FUTURE_DAYS } from "./leagues-config.js";
-import { fetchScoreboard, ymd } from "./espn-api.js";
+import { fetchScoreboard, loadSnapshot, ymd } from "./espn-api.js";
 import { pageState, currentLeague, sameDay, addDays } from "./app-state.js";
-import { matchCardHtml, skeletonHtml, emptyHtml, errorHtml, escapeHtml } from "./match-card-render.js";
+import { matchCardHtml, statusPillHtml, skeletonHtml, emptyHtml, errorHtml, escapeHtml } from "./match-card-render.js";
 
 const $ = (id) => document.getElementById(id);
 const dowFmt = new Intl.DateTimeFormat("vi-VN", { weekday: "short" });
@@ -13,9 +13,12 @@ let loadSeq = 0;            // guards against out-of-order async renders
 let lastRenderSig = "";     // skip DOM rebuilds when a silent poll brings no changes
 let lastViewKey = "";       // entrance animation only when the view truly changes
 
-export function renderNav(liveCounts = new Map()) {
+let lastLiveCounts = new Map(); // remembered so re-renders don't wipe the LIVE dots
+
+export function renderNav(liveCounts) {
+  if (liveCounts) lastLiveCounts = liveCounts;
   $("league-nav").innerHTML = LEAGUES.map((l) => {
-    const live = liveCounts.get(l.id) > 0 ? `<span class="tab-live"></span>` : "";
+    const live = lastLiveCounts.get(l.id) > 0 ? `<span class="tab-live"></span>` : "";
     return `<button class="league-tab ${l.id === currentLeague() ? "active" : ""}"
               data-league-id="${l.id}">${escapeHtml(l.tab)}${live}</button>`;
   }).join("");
@@ -95,6 +98,42 @@ function applyFilters(events, st) {
   return out;
 }
 
+/**
+ * Keyed in-place patch: when the visible list has the same matches in the same
+ * order, update only status pills + changed score nodes instead of rebuilding.
+ * Returns false on any structural difference (new match, reorder, pre→started)
+ * so the caller falls back to a full render.
+ */
+function tryPatchCards(box, events) {
+  const cards = box.querySelectorAll(".match-card");
+  // empty list never "patches" — vacuous match would leave skeleton/stale UI up
+  if (!events.length || cards.length !== events.length) return false;
+  for (let i = 0; i < events.length; i++) {
+    if (cards[i].dataset.eventId !== String(events[i].id)) return false;
+    const started = events[i].state !== "pre";
+    if (started !== !!cards[i].querySelector(".score[data-score-of]")) return false;
+  }
+  events.forEach((ev, i) => patchCard(cards[i], ev));
+  return true;
+}
+
+function patchCard(card, ev) {
+  card.classList.toggle("is-live", ev.state === "in");
+  const pill = card.querySelector(".status-pill");
+  if (pill) pill.outerHTML = statusPillHtml(ev); // clock/FT text
+  if (ev.state === "pre") return;
+  for (const team of [ev.home, ev.away]) {
+    const el = card.querySelector(`.score[data-score-of="${team.id}"]`);
+    if (el && el.textContent !== String(team.score)) {
+      el.textContent = team.score;
+      el.classList.remove("changed");
+      void el.offsetWidth; // restart the flash animation
+      el.classList.add("changed");
+    }
+  }
+  prevScores.set(ev.id, `${ev.home.score}-${ev.away.score}`);
+}
+
 function flashChangedScores(container, events) {
   for (const ev of events) {
     if (ev.state === "pre") continue;
@@ -162,6 +201,21 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     ? `${ymd(addDays(new Date(), -TEAM_RANGE_PAST_DAYS))}-${ymd(addDays(new Date(), TEAM_RANGE_FUTURE_DAYS))}`
     : ymd(st.date);
 
+  // instant paint from the local snapshot while the network round-trip runs;
+  // the fresh response then re-renders (or patches) over it
+  if (!silent && !box.querySelector(".match-card")) {
+    const snap = loadSnapshot(`${league.slug}:${dates}`);
+    if (snap) {
+      const cached = sortEvents(applyFilters(snap.events, st), st.sort);
+      if (cached.length) {
+        settled = true; // real content on screen — no skeleton needed
+        box.classList.add("view-enter");
+        box.innerHTML = listHtml(cached, st, rangeMode);
+        renderHero(snap.season, cached.length, cached.filter((e) => e.state === "in").length);
+      }
+    }
+  }
+
   try {
     const data = await fetchScoreboard(league.slug, dates, { force });
     if (seq !== loadSeq) return { liveCount: 0 }; // a newer load superseded this one
@@ -185,8 +239,15 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     // entrance animation on real view changes (league/day/team) only;
     // sort tweaks, typing, and live score updates swap content in place
     const viewKey = JSON.stringify([league.id, dates, st.teamFilter?.id]);
-    box.classList.toggle("view-enter", viewKey !== lastViewKey);
+    const isNewView = viewKey !== lastViewKey;
     lastViewKey = viewKey;
+
+    // data changed but the list shape didn't → surgical patch, no rebuild
+    if (tryPatchCards(box, filtered)) {
+      renderHero(data.season, filtered.length, liveCount);
+      return { liveCount, imminent };
+    }
+    box.classList.toggle("view-enter", isNewView);
 
     box.innerHTML = filtered.length
       ? listHtml(filtered, st, rangeMode)
@@ -208,7 +269,8 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     if (seq !== loadSeq) return { liveCount: 0 };
     settled = true;
     console.error("loadAndRenderMatches:", err);
-    if (!silent) box.innerHTML = errorHtml();
+    // never wipe good content (snapshot or previous view) with an error screen
+    if (!silent && !box.querySelector(".match-card")) box.innerHTML = errorHtml();
     return { liveCount: 0, error: true };
   }
 }

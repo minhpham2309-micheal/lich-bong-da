@@ -43,7 +43,6 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
-  transition: --accent 0.3s;
 }
 
 /* film grain overlay */
