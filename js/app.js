@@ -24,6 +24,8 @@ function leagueFromHash() {
 
 function renderAll() {
   document.body.dataset.league = currentLeague();
+  // title flips synchronously on league switch — no lag while data loads
+  $("hero-title").textContent = leagueById(currentLeague()).name;
   renderNav();
   renderDateStrip();
   renderChip();
@@ -52,11 +54,16 @@ $("league-nav").addEventListener("click", (e) => {
 $("all-btn").addEventListener("click", () => update({ showAll: !pageState().showAll }));
 $("date-strip").addEventListener("click", (e) => {
   const pill = e.target.closest("[data-date]");
-  if (pill) update({ date: new Date(pill.dataset.date), showAll: false });
+  if (pill) {
+    search.hideSuggestions();
+    // picking a day is an explicit intent — clear the text filter so it acts
+    update({ date: new Date(pill.dataset.date), dateExplicit: true, showAll: false, query: "" });
+  }
 });
 $("strip-prev").addEventListener("click", () => update({ stripOffset: pageState().stripOffset - 7 }));
 $("strip-next").addEventListener("click", () => update({ stripOffset: pageState().stripOffset + 7 }));
-$("today-btn").addEventListener("click", () => update({ date: new Date(), stripOffset: 0, showAll: false }));
+$("today-btn").addEventListener("click", () =>
+  update({ date: new Date(), dateExplicit: false, stripOffset: 0, showAll: false, query: "" }));
 
 /* ── sort ── */
 $("sort-select").addEventListener("change", (e) => update({ sort: e.target.value }));
@@ -111,7 +118,7 @@ $("matches").addEventListener("click", (e) => {
   if (jump) {
     const d = new Date(jump.dataset.jumpDate);
     const diffDays = Math.round((d - new Date()) / 86_400_000);
-    update({ date: d, stripOffset: Math.max(0, diffDays - 3) }); // keep target visible on the strip
+    update({ date: d, dateExplicit: true, stripOffset: Math.max(0, diffDays - 3) }); // keep target visible
   }
 });
 

@@ -21,6 +21,7 @@ export function highlight(name, query) {
 }
 
 const timeFmt = new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" });
+export const kickoffText = (date) => timeFmt.format(date); // shared with the patch path
 
 function formPips(form) {
   if (!form) return "";
@@ -72,8 +73,8 @@ export function matchCardHtml(ev, query = "", perspectiveTeamId = null) {
   const started = ev.state !== "pre";
   const score = started
     ? `<div class="score-box">
-         <span class="score" data-score-of="${ev.home.id}">${escapeHtml(ev.home.score)}</span>
-         <span class="score" data-score-of="${ev.away.id}">${escapeHtml(ev.away.score)}</span>
+         <span class="score" data-score-of="${escapeHtml(String(ev.home.id))}">${escapeHtml(ev.home.score)}</span>
+         <span class="score" data-score-of="${escapeHtml(String(ev.away.id))}">${escapeHtml(ev.away.score)}</span>
        </div>`
     : `<div class="score-box upcoming"><span>–</span><span>–</span></div>`;
 
@@ -88,7 +89,8 @@ export function matchCardHtml(ev, query = "", perspectiveTeamId = null) {
   ].filter(Boolean).join("");
 
   return `
-  <article class="match-card ${ev.state === "in" ? "is-live" : ""}" data-event-id="${ev.id}">
+  <article class="match-card ${ev.state === "in" ? "is-live" : ""}"
+           data-event-id="${escapeHtml(String(ev.id))}" data-state="${escapeHtml(ev.state)}">
     <div class="match-when">
       <span class="kickoff-time">${timeFmt.format(ev.date)}</span>
       ${statusPillHtml(ev)}

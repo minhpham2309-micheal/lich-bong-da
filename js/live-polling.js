@@ -84,9 +84,12 @@ async function scanAllLeaguesForLive() {
   scanning = true;
   lastScanAt = Date.now();
   try {
-    const today = ymd(new Date());
+    // ET yesterday-today window: during VN mornings every live match sits in
+    // ESPN's "yesterday" bucket — today-only scans would go dark exactly then
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const win = `${ymd(y)}-${ymd(new Date())}`;
     const results = await Promise.allSettled(
-      LEAGUES.map((l) => fetchScoreboard(l.slug, today)),
+      LEAGUES.map((l) => fetchScoreboard(l.slug, win)),
     );
     const counts = new Map();
     let total = 0;

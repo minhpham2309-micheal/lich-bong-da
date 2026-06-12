@@ -9,6 +9,7 @@ const listeners = new Set();
 function freshPageState() {
   return {
     date: new Date(),       // selected day
+    dateExplicit: false,    // false = "follow today" — rolls over past midnight
     showAll: false,         // "Tất cả" mode: full upcoming window instead of one day
     stripOffset: 0,         // date-strip window shift (in days)
     teamFilter: null,       // { id, name, logo } -> schedule view
@@ -19,7 +20,11 @@ function freshPageState() {
 
 export function pageState(leagueId = currentLeagueId) {
   if (!pages.has(leagueId)) pages.set(leagueId, freshPageState());
-  return pages.get(leagueId);
+  const s = pages.get(leagueId);
+  // a tab left open past midnight: an implicit "today" must follow the clock
+  // (very real here — VN kickoffs cluster around 2-4 AM)
+  if (!s.dateExplicit && !sameDay(s.date, new Date())) s.date = new Date();
+  return s;
 }
 
 export function currentLeague() {

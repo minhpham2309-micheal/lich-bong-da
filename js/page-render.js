@@ -2,7 +2,7 @@
 import { LEAGUES, leagueById, TEAM_RANGE_PAST_DAYS, TEAM_RANGE_FUTURE_DAYS } from "./leagues-config.js";
 import { fetchScoreboard, fetchTeamSchedule, loadSnapshot, ymd } from "./espn-api.js";
 import { pageState, currentLeague, sameDay, addDays } from "./app-state.js";
-import { matchCardHtml, statusPillHtml, skeletonHtml, emptyHtml, errorHtml, escapeHtml } from "./match-card-render.js";
+import { matchCardHtml, statusPillHtml, kickoffText, skeletonHtml, emptyHtml, errorHtml, escapeHtml } from "./match-card-render.js";
 import { showNetBanner, hideNetBanner } from "./net-banner.js";
 
 const $ = (id) => document.getElementById(id);
@@ -86,8 +86,10 @@ function sortEvents(events, mode) {
   return arr;
 }
 
-function applyFilters(events, st) {
+function applyFilters(events, st, dayOnly = null) {
   let out = events.filter((e) => e.home && e.away);
+  // ESPN buckets days by US Eastern — we fetch ±1 day and cut to the local day here
+  if (dayOnly) out = out.filter((e) => sameDay(e.date, dayOnly));
   if (st.teamFilter)
     out = out.filter((e) => e.home?.id === st.teamFilter.id || e.away?.id === st.teamFilter.id);
   if (st.query) {
@@ -105,17 +107,15 @@ function applyFilters(events, st) {
  * Returns false on any structural difference (new match, reorder, pre→started)
  * so the caller falls back to a full render.
  */
-function tryPatchCards(box, events, needsResultChips) {
+function tryPatchCards(box, events) {
   const cards = box.querySelectorAll(".match-card");
   // empty list never "patches" — vacuous match would leave skeleton/stale UI up
   if (!events.length || cards.length !== events.length) return false;
   for (let i = 0; i < events.length; i++) {
     if (cards[i].dataset.eventId !== String(events[i].id)) return false;
-    const started = events[i].state !== "pre";
-    if (started !== !!cards[i].querySelector(".score[data-score-of]")) return false;
-    // team view: a match that just finished needs its W/D/L chip — full render
-    if (needsResultChips && events[i].state === "post" && !cards[i].querySelector(".result-chip"))
-      return false;
+    // any state transition (pre→in, in→post, …) changes structure/styling
+    // (score box, winner/loser highlight, W/D/L chip) — needs a full render
+    if (cards[i].dataset.state !== events[i].state) return false;
   }
   events.forEach((ev, i) => patchCard(cards[i], ev));
   return true;
@@ -124,10 +124,12 @@ function tryPatchCards(box, events, needsResultChips) {
 function patchCard(card, ev) {
   card.classList.toggle("is-live", ev.state === "in");
   const pill = card.querySelector(".status-pill");
-  if (pill) pill.outerHTML = statusPillHtml(ev); // clock/FT text
+  if (pill && pill.outerHTML !== statusPillHtml(ev)) pill.outerHTML = statusPillHtml(ev);
+  const ko = card.querySelector(".kickoff-time");
+  if (ko && ko.textContent !== kickoffText(ev.date)) ko.textContent = kickoffText(ev.date);
   if (ev.state === "pre") return;
   for (const team of [ev.home, ev.away]) {
-    const el = card.querySelector(`.score[data-score-of="${team.id}"]`);
+    const el = card.querySelector(`.score[data-score-of="${CSS.escape(String(team.id))}"]`);
     if (el && el.textContent !== String(team.score)) {
       el.textContent = team.score;
       el.classList.remove("changed");
@@ -169,10 +171,15 @@ function listHtml(events, st, grouped) {
 // On an empty day, look ahead and offer a one-click jump to the next matchday
 async function suggestNextMatchday(box, st, league, seq) {
   try {
-    const range = `${ymd(addDays(st.date, 1))}-${ymd(addDays(st.date, 75))}`;
+    // start at the selected ET bucket: a "tomorrow VN" match can live in it
+    const range = `${ymd(st.date)}-${ymd(addDays(st.date, 75))}`;
     const data = await fetchScoreboard(league.slug, range);
     if (seq !== loadSeq) return;
-    const upcoming = data.events.filter((e) => e.home && e.away).sort((a, b) => a.date - b.date);
+    const dayEnd = new Date(st.date);
+    dayEnd.setHours(23, 59, 59, 999);
+    const upcoming = data.events
+      .filter((e) => e.home && e.away && e.date > dayEnd) // strictly after the selected local day
+      .sort((a, b) => a.date - b.date);
     if (!upcoming.length) return;
     const next = upcoming[0];
     const count = upcoming.filter((e) => sameDay(e.date, next.date)).length;
@@ -202,25 +209,30 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
   // team filter, "Tất cả" mode, or free-text search all widen to the full window —
   // searching should never be trapped inside the selected day
   const rangeMode = !!(st.teamFilter || st.showAll || st.query);
+  // ESPN buckets "dates=" by US Eastern; a local (UTC+7) day straddles two
+  // buckets, so day view fetches ±1 day and applyFilters cuts to the local day
+  const dayOnly = rangeMode ? null : st.date;
   const dates = st.teamFilter
     ? `team:${st.teamFilter.id}` // label for sig/viewKey — fetch uses the schedule endpoint
     : rangeMode
       ? `${ymd(addDays(new Date(), -TEAM_RANGE_PAST_DAYS))}-${ymd(addDays(new Date(), TEAM_RANGE_FUTURE_DAYS))}`
-      : ymd(st.date);
+      : `${ymd(addDays(st.date, -1))}-${ymd(addDays(st.date, 1))}`;
 
   // instant paint from the local snapshot while the network round-trip runs;
   // the fresh response then re-renders (or patches) over it
   if (!silent && !box.querySelector(".match-card")) {
-    const snap = loadSnapshot(`${league.slug}:${dates}`);
-    if (snap) {
-      const cached = sortEvents(applyFilters(snap.events, st), st.sort);
-      if (cached.length) {
-        settled = true; // real content on screen — no skeleton needed
-        box.classList.add("view-enter");
-        box.innerHTML = listHtml(cached, st, rangeMode);
-        renderHero(snap.season, cached.length, cached.filter((e) => e.state === "in").length);
+    try {
+      const snap = loadSnapshot(`${league.slug}:${dates}`);
+      if (snap) {
+        const cached = sortEvents(applyFilters(snap.events, st, dayOnly), st.sort);
+        if (cached.length) {
+          settled = true; // real content on screen — no skeleton needed
+          box.classList.add("view-enter");
+          box.innerHTML = listHtml(cached, st, rangeMode);
+          renderHero(snap.season, cached.length, cached.filter((e) => e.state === "in").length);
+        }
       }
-    }
+    } catch { /* snapshot paint is best-effort — the network render follows */ }
   }
 
   if (!silent) $("refresh-btn").classList.add("spinning"); // background fetch cue
@@ -229,9 +241,12 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     if (st.teamFilter) {
       // team view: full season from the schedule endpoint (real, verifiable
       // results) + today's scoreboard merged in for live scores
+      // live window = ET yesterday-today: during VN mornings the live match
+      // sits in ESPN's "yesterday" bucket
+      const liveWin = `${ymd(addDays(new Date(), -1))}-${ymd(new Date())}`;
       const [sched, today] = await Promise.all([
         fetchTeamSchedule(league.slug, st.teamFilter.id),
-        fetchScoreboard(league.slug, ymd(new Date()), { force }),
+        fetchScoreboard(league.slug, liveWin, { force }),
       ]);
       const tid = String(st.teamFilter.id);
       const byId = new Map(sched.events.map((e) => [e.id, e]));
@@ -263,7 +278,7 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     settled = true;
     hideNetBanner(); // fresh data landed — any stale-data warning is obsolete
 
-    const filtered = sortEvents(applyFilters(data.events, st), st.sort);
+    const filtered = sortEvents(applyFilters(data.events, st, dayOnly), st.sort);
     const liveCount = filtered.filter((e) => e.state === "in").length;
     // kickoff within 10 min (or feed not flipped to "in" yet) → poll at live cadence
     const imminent = filtered.some(
@@ -273,7 +288,7 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     // weak-device guard: identical view + identical data → leave the DOM alone
     const sig = JSON.stringify([
       league.id, dates, st.sort, st.query, st.teamFilter?.id,
-      filtered.map((e) => [e.id, e.state, e.home.score, e.away.score, e.clock, e.statusDetail]),
+      filtered.map((e) => [e.id, +e.date, e.state, e.home.score, e.away.score, e.clock, e.statusDetail]),
     ]);
     if (silent && sig === lastRenderSig) return { liveCount, imminent };
     lastRenderSig = sig;
@@ -285,7 +300,7 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     lastViewKey = viewKey;
 
     // data changed but the list shape didn't → surgical patch, no rebuild
-    if (tryPatchCards(box, filtered, !!st.teamFilter)) {
+    if (tryPatchCards(box, filtered)) {
       renderHero(data.season, filtered.length, liveCount);
       return { liveCount, imminent };
     }
@@ -311,11 +326,10 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     if (seq !== loadSeq) return { liveCount: 0 };
     settled = true;
     console.error("loadAndRenderMatches:", err);
-    // never wipe good content (snapshot or previous view) with an error screen,
-    // but DO tell the user the scores on screen may be stale
-    if (box.querySelector(".match-card"))
-      showNetBanner("Không lấy được dữ liệu mới — đang hiển thị bản đã lưu, sẽ tự thử lại.");
-    else if (!silent) box.innerHTML = errorHtml();
+    // never wipe good content (cards or a valid empty-state) with an error
+    // screen — but always tell the user the data on screen may be stale
+    if (!silent && !box.querySelector(".match-card")) box.innerHTML = errorHtml();
+    else showNetBanner("Không lấy được dữ liệu mới — đang hiển thị bản đã lưu, sẽ tự thử lại.");
     return { liveCount: 0, error: true };
   } finally {
     if (!silent && seq === loadSeq) $("refresh-btn").classList.remove("spinning");

@@ -12,13 +12,16 @@ export function ymd(date) {
 }
 
 // TTL theo bản chất dữ liệu: ngày đã đá xong không bao giờ đổi,
-// lịch tương lai hiếm khi đổi, chỉ hôm nay (live) mới cần tươi liên tục
+// lịch tương lai hiếm khi đổi, chỉ hôm nay (live) mới cần tươi liên tục.
+// ESPN buckets days by US Eastern: the ET-"yesterday" bucket can still hold a
+// live match until ~11:00 VN, so only end < yesterday counts as immutable.
 function ttlFor(dates) {
   const today = ymd(new Date());
+  const y = new Date(); y.setDate(y.getDate() - 1);
   const [start, end = start] = dates.split("-");
-  if (end < today) return Infinity;      // finished days are immutable
+  if (end < ymd(y)) return Infinity;     // safely finished buckets are immutable
   if (start > today) return 30 * 60_000; // future fixtures: 30 min
-  return 15_000;                          // touches today: keep fresh
+  return 15_000;                          // touches today/yesterday: keep fresh
 }
 
 async function getJson(url) {
@@ -43,8 +46,9 @@ export function logoHiDpi(url) {
 }
 
 /**
- * Fetch fixtures for a league. `dates` = "YYYYMMDD" or "YYYYMMDD-YYYYMMDD".
- * Cache TTL: 15s if range touches today (live data), 5min otherwise.
+ * Fetch fixtures for a league. `dates` = "YYYYMMDD" or "YYYYMMDD-YYYYMMDD"
+ * (ESPN buckets these by US Eastern). Cache TTL: see ttlFor — 15s when the
+ * range touches today/yesterday, 30min future, immutable past.
  */
 export async function fetchScoreboard(slug, dates, { force = false } = {}) {
   const key = `${slug}:${dates}`;
@@ -86,7 +90,11 @@ export function loadSnapshot(key, maxAgeMs = 12 * 60 * 60 * 1000) {
     if (!raw) return null;
     const s = JSON.parse(raw);
     if (Date.now() - s.at > maxAgeMs) return null;
-    s.events.forEach((e) => (e.date = new Date(e.date))); // revive Date objects
+    // revive Date objects; drop corrupt entries so Intl.format can't throw later
+    s.events = (s.events || []).filter((e) => {
+      e.date = new Date(e.date);
+      return !isNaN(+e.date);
+    });
     return s;
   } catch {
     return null;
