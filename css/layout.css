@@ -205,16 +205,25 @@
 .date-pill.selected .dow, .date-pill.selected .dom { color: var(--accent-ink); }
 .date-pill.is-today:not(.selected) { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
 
-.all-pill { border-style: dashed; }
-.all-pill .dom-all {
-  font-family: var(--font-body);
-  font-size: 0.82rem;
+/* pinned "view everything" toggle — sits outside the scrolling strip */
+.all-toggle {
+  flex-shrink: 0;
+  font-size: 0.75rem;
   font-weight: 700;
-  color: var(--text);
-  line-height: 1.4;
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+  transition: all 0.18s;
 }
-.all-pill.selected { border-style: solid; }
-.all-pill.selected .dom-all { color: var(--accent-ink); }
+.all-toggle:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.all-toggle.active {
+  background: var(--accent);
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 35%, transparent);
+}
 
 .strip-nav {
   font-size: 1.3rem;
@@ -284,11 +293,22 @@
   .today-btn { padding: 11px 12px; }
 }
 
-/* small phones */
+/* small phones: arrows + strip on row 1, [Tất cả | Hôm nay] split row 2 */
 @media (max-width: 480px) {
   .brand-sub { display: none; }
-  .date-strip-wrap { flex-wrap: wrap; }
-  .today-btn { order: 1; }
+  .date-strip-wrap {
+    display: grid;
+    grid-template-columns: 42px 1fr 1fr 42px;
+    grid-template-areas:
+      "prev strip strip next"
+      "all  all   today today";
+    gap: 8px;
+  }
+  #strip-prev { grid-area: prev; }
+  #strip-next { grid-area: next; }
+  .date-strip { grid-area: strip; min-width: 0; }
+  .all-toggle { grid-area: all; padding: 11px 12px; }
+  .today-btn { grid-area: today; padding: 11px 12px; }
 }
 
 /* compact phones (iPhone SE & co.) */

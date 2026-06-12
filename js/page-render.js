@@ -38,7 +38,8 @@ export function renderHero(season, eventCount, liveCount) {
 export function renderDateStrip() {
   const st = pageState();
   const wrap = $("date-strip-wrap");
-  wrap.style.display = st.teamFilter ? "none" : "flex"; // team view spans a range
+  // hide in team-schedule view; empty string defers to the stylesheet (flex/grid per breakpoint)
+  wrap.style.display = st.teamFilter ? "none" : "";
   if (st.teamFilter) return;
 
   const today = new Date();
@@ -54,10 +55,8 @@ export function renderDateStrip() {
       <span class="dow">${dowFmt.format(d)}</span><span class="dom">${d.getDate()}</span>
     </button>`;
   });
-  const allPill = `<button class="date-pill all-pill ${st.showAll ? "selected" : ""}" data-show-all>
-    <span class="dow">xem</span><span class="dom-all">Tất cả</span>
-  </button>`;
-  $("date-strip").innerHTML = allPill + pills.join("");
+  $("all-btn").classList.toggle("active", st.showAll);
+  $("date-strip").innerHTML = pills.join("");
   $("date-strip").querySelector(".selected")?.scrollIntoView({ inline: "center", block: "nearest" });
 }
 

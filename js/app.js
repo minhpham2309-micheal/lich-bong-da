@@ -38,8 +38,8 @@ $("league-nav").addEventListener("click", (e) => {
 });
 
 /* ── date strip ── */
+$("all-btn").addEventListener("click", () => update({ showAll: !pageState().showAll }));
 $("date-strip").addEventListener("click", (e) => {
-  if (e.target.closest("[data-show-all]")) return update({ showAll: true });
   const pill = e.target.closest("[data-date]");
   if (pill) update({ date: new Date(pill.dataset.date), showAll: false });
 });
