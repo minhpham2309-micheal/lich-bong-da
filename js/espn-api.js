@@ -50,7 +50,7 @@ export function logoHiDpi(url) {
  * (ESPN buckets these by US Eastern). Cache TTL: see ttlFor — 15s when the
  * range touches today/yesterday, 30min future, immutable past.
  */
-export async function fetchScoreboard(slug, dates, { force = false } = {}) {
+export async function fetchScoreboard(slug, dates, { force = false, snapshot = true } = {}) {
   const key = `${slug}:${dates}`;
   const ttl = ttlFor(dates);
   const hit = scoreboardCache.get(key);
@@ -65,22 +65,42 @@ export async function fetchScoreboard(slug, dates, { force = false } = {}) {
     events: (raw.events || []).map(normalizeEvent),
   };
   scoreboardCache.set(key, { at: Date.now(), data });
-  saveSnapshot(key, data);
+  capMap(scoreboardCache, 40);
+  if (snapshot) saveSnapshot(key, data);
   return data;
+}
+
+// Maps grow per visited day/team — keep a session bound (delete oldest entries)
+function capMap(map, max) {
+  while (map.size > max) map.delete(map.keys().next().value);
 }
 
 /* ── localStorage snapshots: instant paint on revisit, network then patches ── */
 const SNAP_PREFIX = "md:snap:";
+const snapSavedAt = new Map(); // per-key write throttle
+let pruned = false;            // prune is O(store) with JSON.parse — once per session
+
+function pruneSnapshots() {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (!k || !k.startsWith(SNAP_PREFIX)) continue;
+    try {
+      const s = JSON.parse(localStorage.getItem(k) || "{}");
+      if (!s.at || Date.now() - s.at > 3 * 86_400_000) localStorage.removeItem(k);
+    } catch {
+      localStorage.removeItem(k); // a corrupt entry must not block pruning forever
+    }
+  }
+}
 
 function saveSnapshot(key, data) {
   try {
+    // live polls hit this every 7s — serializing 100+ events each time is real
+    // main-thread cost on phones, and the data barely changes: throttle per key
+    if (Date.now() - (snapSavedAt.get(key) || 0) < 60_000) return;
+    if (!pruned) { pruned = true; pruneSnapshots(); } // prune BEFORE writing: frees quota first
     localStorage.setItem(SNAP_PREFIX + key, JSON.stringify({ at: Date.now(), ...data }));
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (!k || !k.startsWith(SNAP_PREFIX)) continue;
-      const s = JSON.parse(localStorage.getItem(k) || "{}");
-      if (!s.at || Date.now() - s.at > 3 * 86_400_000) localStorage.removeItem(k);
-    }
+    snapSavedAt.set(key, Date.now());
   } catch { /* quota / private mode — snapshots are best-effort */ }
 }
 
@@ -111,7 +131,8 @@ export async function fetchTeams(slug) {
   const now = new Date();
   const from = new Date(now); from.setDate(from.getDate() - 120);
   const to = new Date(now); to.setDate(to.getDate() + 120);
-  const { events } = await fetchScoreboard(slug, `${ymd(from)}-${ymd(to)}`);
+  // snapshot:false — a ±120-day payload is never re-read as a snapshot, only mined for names
+  const { events } = await fetchScoreboard(slug, `${ymd(from)}-${ymd(to)}`, { snapshot: false });
   // knockout-bracket placeholders ("Third Place Group A/B", "Winner Match 74"…) are not real teams
   const placeholder = /^(third place|winner|runner|loser|tbd|to be det)/i;
   const byId = new Map();
@@ -163,6 +184,7 @@ export async function fetchTeamSchedule(slug, teamId) {
   }
   const data = { season, events: [...byId.values()] };
   scheduleCache.set(key, { at: Date.now(), data });
+  capMap(scheduleCache, 20);
   return data;
 }
 

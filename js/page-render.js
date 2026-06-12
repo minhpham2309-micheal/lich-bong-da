@@ -141,6 +141,7 @@ function patchCard(card, ev) {
 }
 
 function flashChangedScores(container, events) {
+  if (prevScores.size > 500) prevScores.clear(); // session bound — flash resets are harmless
   for (const ev of events) {
     if (ev.state === "pre") continue;
     const key = `${ev.home.score}-${ev.away.score}`;

@@ -24,7 +24,7 @@ export function startPolling(cadenceCb) {
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) stop();
-    else { tick(); }
+    else { emptyScans = 0; tick(); } // user is back — take a fresh look at all leagues
   });
   // flaky network: halt while offline, refresh the moment we're back
   window.addEventListener("offline", () => {
@@ -70,13 +70,17 @@ async function tick() {
 // and the topbar summary. Served mostly from cache (15s TTL on today).
 let scanning = false;
 let lastScanAt = 0;
+let emptyScans = 0; // consecutive scans with zero live matches anywhere
 
-// 8 requests per scan — pace by connection quality so fast networks get fresher badges
+// 8 requests per scan — pace by connection quality so fast networks get fresher
+// badges, and back off hard when nothing is live (idle tabs shouldn't burn data)
 function scanInterval() {
   const c = navigator.connection;
-  if (c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ""))) return 180_000;
-  if (c && c.effectiveType === "3g") return 90_000;
-  return 30_000;
+  const base =
+    c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || "")) ? 180_000
+    : c && c.effectiveType === "3g" ? 90_000
+    : 30_000;
+  return emptyScans >= 2 ? Math.max(base, 300_000) : base;
 }
 
 async function scanAllLeaguesForLive() {
@@ -100,6 +104,7 @@ async function scanAllLeaguesForLive() {
       counts.set(LEAGUES[i].id, n);
       total += n;
     });
+    emptyScans = total === 0 ? emptyScans + 1 : 0;
     renderNav(counts);
 
     const summary = document.getElementById("live-summary");
