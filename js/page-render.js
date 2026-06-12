@@ -11,6 +11,7 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "numeric
 let prevScores = new Map(); // eventId -> "home-away", to flash score changes
 let loadSeq = 0;            // guards against out-of-order async renders
 let lastRenderSig = "";     // skip DOM rebuilds when a silent poll brings no changes
+let lastViewKey = "";       // entrance animation only when the view truly changes
 
 export function renderNav(liveCounts = new Map()) {
   $("league-nav").innerHTML = LEAGUES.map((l) => {
@@ -146,7 +147,13 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
   const league = leagueById(currentLeague());
   const seq = ++loadSeq;
   const box = $("matches");
-  if (!silent) box.innerHTML = skeletonHtml();
+  // skeleton only if the fetch is actually slow — cached loads render directly,
+  // so quick interactions don't flash a loading state that reads as lag
+  let settled = false;
+  if (!silent)
+    setTimeout(() => {
+      if (!settled && seq === loadSeq) box.innerHTML = skeletonHtml();
+    }, 180);
 
   // team filter, "Tất cả" mode, or free-text search all widen to the full window —
   // searching should never be trapped inside the selected day
@@ -158,6 +165,7 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
   try {
     const data = await fetchScoreboard(league.slug, dates, { force });
     if (seq !== loadSeq) return { liveCount: 0 }; // a newer load superseded this one
+    settled = true;
 
     const filtered = sortEvents(applyFilters(data.events, st), st.sort);
     const liveCount = filtered.filter((e) => e.state === "in").length;
@@ -173,6 +181,12 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     ]);
     if (silent && sig === lastRenderSig) return { liveCount, imminent };
     lastRenderSig = sig;
+
+    // entrance animation on real view changes (league/day/team) only;
+    // sort tweaks, typing, and live score updates swap content in place
+    const viewKey = JSON.stringify([league.id, dates, st.teamFilter?.id]);
+    box.classList.toggle("view-enter", viewKey !== lastViewKey);
+    lastViewKey = viewKey;
 
     box.innerHTML = filtered.length
       ? listHtml(filtered, st, rangeMode)
@@ -192,6 +206,7 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     return { liveCount, imminent };
   } catch (err) {
     if (seq !== loadSeq) return { liveCount: 0 };
+    settled = true;
     console.error("loadAndRenderMatches:", err);
     if (!silent) box.innerHTML = errorHtml();
     return { liveCount: 0, error: true };

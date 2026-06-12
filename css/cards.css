@@ -33,8 +33,9 @@
   border: 1px solid var(--line);
   border-radius: var(--radius);
   transition: background 0.2s, border-color 0.2s, transform 0.2s;
-  animation: rise 0.4s ease both;
 }
+/* entrance animation only when arriving at a new view — not on in-place updates */
+.matches.view-enter .match-card { animation: rise 0.4s ease both; }
 @media (hover: hover) {
   .match-card:hover {
     background: var(--panel-hover);
