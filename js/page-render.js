@@ -108,17 +108,24 @@ function applyFilters(events, st, dayOnly = null) {
  * Returns false on any structural difference (new match, reorder, pre→started)
  * so the caller falls back to a full render.
  */
-function tryPatchCards(box, events) {
+function tryPatchCards(box, events, st) {
   const cards = box.querySelectorAll(".match-card");
-  // empty list never "patches" — vacuous match would leave skeleton/stale UI up
+  // empty list never "patches" — vacuous match would leave skeleton/stale UI up;
+  // membership/order changes need the full list render
   if (!events.length || cards.length !== events.length) return false;
-  for (let i = 0; i < events.length; i++) {
+  for (let i = 0; i < events.length; i++)
     if (cards[i].dataset.eventId !== String(events[i].id)) return false;
-    // any state transition (pre→in, in→post, …) changes structure/styling
-    // (score box, winner/loser highlight, W/D/L chip) — needs a full render
-    if (cards[i].dataset.state !== events[i].state) return false;
-  }
-  events.forEach((ev, i) => patchCard(cards[i], ev));
+
+  events.forEach((ev, i) => {
+    if (cards[i].dataset.state !== ev.state) {
+      // state transition (pre→in, in→post) changes structure/styling — rebuild
+      // JUST this card; neighbours that are still live keep their DOM untouched
+      cards[i].outerHTML = matchCardHtml(ev, st.query, st.teamFilter?.id);
+      if (ev.state !== "pre") prevScores.set(ev.id, `${ev.home.score}-${ev.away.score}`);
+    } else {
+      patchCard(cards[i], ev);
+    }
+  });
   return true;
 }
 
@@ -311,7 +318,7 @@ export async function loadAndRenderMatches({ force = false, silent = false } = {
     lastViewKey = viewKey;
 
     // data changed but the list shape didn't → surgical patch, no rebuild
-    if (tryPatchCards(box, filtered)) {
+    if (tryPatchCards(box, filtered, st)) {
       renderHero(data.season, filtered.length, liveCount);
       return { liveCount, imminent };
     }
